@@ -1,0 +1,46 @@
+
+# FVM Version Cache
+.fvm/
+
+# Dart Tool
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+.pubspec.lock
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# macOS
+.DS_Store
+
+# Android
+android/.gradle/
+android/app/build/
+
+# iOS
+ios/Pods/
+ios/build/
+ios/.symlinks/
+
+# macOS
+macos/Pods/
+macos/build/
+
+# Linux
+linux/build/
+
+# Windows
+windows/build/
+
+# Web
+web/build/
+
+# Flutter
+.metadata
