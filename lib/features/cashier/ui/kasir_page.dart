@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/database/user_dao.dart';
 import '../../../core/models/user.dart';
 import '../../../core/utils/responsive_dialog.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 
 class KasirPage extends StatefulWidget {
   const KasirPage({super.key});
@@ -38,7 +39,8 @@ class _KasirPageState extends State<KasirPage> {
 
   void _onScroll() {
     if (_loading || !_hasMore) return;
-    if (_scrollCtrl.position.pixels >= _scrollCtrl.position.maxScrollExtent - 200) {
+    if (_scrollCtrl.position.pixels >=
+        _scrollCtrl.position.maxScrollExtent - 200) {
       _loadMore();
     }
   }
@@ -57,12 +59,13 @@ class _KasirPageState extends State<KasirPage> {
     );
     final count = await _dao.getCount(search: _search.isEmpty ? null : _search);
 
-    if (mounted) setState(() {
-      _users = list;
-      _totalCount = count;
-      _loading = false;
-      _hasMore = list.length >= _pageSize;
-    });
+    if (mounted)
+      setState(() {
+        _users = list;
+        _totalCount = count;
+        _loading = false;
+        _hasMore = list.length >= _pageSize;
+      });
   }
 
   Future<void> _loadMore() async {
@@ -75,11 +78,12 @@ class _KasirPageState extends State<KasirPage> {
       search: _search.isEmpty ? null : _search,
     );
 
-    if (mounted) setState(() {
-      _users.addAll(list);
-      _loading = false;
-      _hasMore = list.length >= _pageSize;
-    });
+    if (mounted)
+      setState(() {
+        _users.addAll(list);
+        _loading = false;
+        _hasMore = list.length >= _pageSize;
+      });
   }
 
   void _onSearch(String v) {
@@ -122,7 +126,9 @@ class _KasirPageState extends State<KasirPage> {
                   controller: passCtrl,
                   obscureText: true,
                   decoration: InputDecoration(
-                    labelText: user == null ? 'Password' : 'Password Baru (kosong = tidak ganti)',
+                    labelText: user == null
+                        ? 'Password'
+                        : 'Password Baru (kosong = tidak ganti)',
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -135,7 +141,8 @@ class _KasirPageState extends State<KasirPage> {
                   ),
                   items: const [
                     DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                    DropdownMenuItem(value: 'merchant', child: Text('Merchant')),
+                    DropdownMenuItem(
+                        value: 'merchant', child: Text('Merchant')),
                     DropdownMenuItem(value: 'kasir', child: Text('Kasir')),
                   ],
                   onChanged: (v) => setState(() => role = v!),
@@ -269,187 +276,226 @@ class _KasirPageState extends State<KasirPage> {
         onPressed: () => _showForm(),
         child: const Icon(Icons.add),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchCtrl,
-              decoration: InputDecoration(
-                hintText: 'Cari kasir...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+      body: Padding(
+        padding: ResponsivePageInsets.horizontal(context, maxContentWidth: 680),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Cari kasir...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  suffixIcon: _searchCtrl.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            _onSearch('');
+                          },
+                        )
+                      : null,
                 ),
-                filled: true,
-                suffixIcon: _searchCtrl.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          _onSearch('');
-                        },
-                      )
-                    : null,
+                onChanged: _onSearch,
               ),
-              onChanged: _onSearch,
             ),
-          ),
-          Expanded(
-            child: _users.isEmpty && !_loading
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.people_outline, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        const SizedBox(height: 8),
-                        Text(
-                          _search.isEmpty ? 'Belum ada kasir' : 'Kasir tidak ditemukan',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollCtrl,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _users.length + (_hasMore ? 1 : 0),
-                    itemBuilder: (_, i) {
-                      if (i >= _users.length) {
-                        return const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(16),
-                            child: CircularProgressIndicator(),
+            Expanded(
+              child: _users.isEmpty && !_loading
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.people_outline,
+                              size: 48,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant),
+                          const SizedBox(height: 8),
+                          Text(
+                            _search.isEmpty
+                                ? 'Belum ada kasir'
+                                : 'Kasir tidak ditemukan',
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant),
                           ),
-                        );
-                      }
-                      final u = _users[i];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: InkWell(
-                          onTap: () => _showForm(u),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor: u.isActive
-                                      ? Theme.of(context).colorScheme.primaryContainer
-                                      : Colors.grey[300],
-                                  child: Text(
-                                    u.name[0].toUpperCase(),
-                                    style: TextStyle(
-                                      color: u.isActive
-                                          ? Theme.of(context).colorScheme.onPrimaryContainer
-                                          : Colors.grey[600],
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        u.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '@${u.username}',
-                                        style: TextStyle(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: u.role == 'admin'
-                                              ? Colors.blue[100]
-                                              : u.role == 'merchant'
-                                                  ? Colors.purple[100]
-                                                  : Colors.green[100],
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          u.role == 'admin' ? 'Admin' : u.role == 'merchant' ? 'Merchant' : 'Kasir',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: u.role == 'admin'
-                                                ? Colors.blue[700]
-                                                : u.role == 'merchant'
-                                                    ? Colors.purple[700]
-                                                    : Colors.green[700],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: u.isActive ? Colors.green[100] : Colors.red[100],
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        u.isActive ? 'Aktif' : 'Nonaktif',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: u.isActive ? Colors.green[700] : Colors.red[700],
-                                        ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _users.length + (_hasMore ? 1 : 0),
+                      itemBuilder: (_, i) {
+                        if (i >= _users.length) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16),
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+                        final u = _users[i];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: InkWell(
+                            onTap: () => _showForm(u),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    backgroundColor: u.isActive
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .primaryContainer
+                                        : Colors.grey[300],
+                                    child: Text(
+                                      u.name[0].toUpperCase(),
+                                      style: TextStyle(
+                                        color: u.isActive
+                                            ? Theme.of(context)
+                                                .colorScheme
+                                                .onPrimaryContainer
+                                            : Colors.grey[600],
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        IconButton(
-                                          icon: Icon(
-                                            u.isActive ? Icons.block : Icons.check_circle,
-                                            color: u.isActive ? Colors.orange : Colors.green,
+                                        Text(
+                                          u.name,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
                                           ),
-                                          onPressed: () => _toggleActive(u),
-                                          tooltip: u.isActive ? 'Nonaktifkan' : 'Aktifkan',
                                         ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                          onPressed: () => _delete(u),
-                                          tooltip: 'Hapus',
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '@${u.username}',
+                                          style: TextStyle(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: u.role == 'admin'
+                                                ? Colors.blue[100]
+                                                : u.role == 'merchant'
+                                                    ? Colors.purple[100]
+                                                    : Colors.green[100],
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            u.role == 'admin'
+                                                ? 'Admin'
+                                                : u.role == 'merchant'
+                                                    ? 'Merchant'
+                                                    : 'Kasir',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: u.role == 'admin'
+                                                  ? Colors.blue[700]
+                                                  : u.role == 'merchant'
+                                                      ? Colors.purple[700]
+                                                      : Colors.green[700],
+                                            ),
+                                          ),
                                         ),
                                       ],
                                     ),
-                                  ],
-                                ),
-                              ],
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: u.isActive
+                                              ? Colors.green[100]
+                                              : Colors.red[100],
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          u.isActive ? 'Aktif' : 'Nonaktif',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: u.isActive
+                                                ? Colors.green[700]
+                                                : Colors.red[700],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: Icon(
+                                              u.isActive
+                                                  ? Icons.block
+                                                  : Icons.check_circle,
+                                              color: u.isActive
+                                                  ? Colors.orange
+                                                  : Colors.green,
+                                            ),
+                                            onPressed: () => _toggleActive(u),
+                                            tooltip: u.isActive
+                                                ? 'Nonaktifkan'
+                                                : 'Aktifkan',
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(
+                                                Icons.delete_outline,
+                                                color: Colors.red),
+                                            onPressed: () => _delete(u),
+                                            tooltip: 'Hapus',
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
+            ),
+            if (_totalCount > 0)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  '$_totalCount kasir',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-          ),
-          if (_totalCount > 0)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                '$_totalCount kasir',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

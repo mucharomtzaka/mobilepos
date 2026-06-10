@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/database/order_dao.dart';
@@ -10,6 +11,8 @@ import '../../../core/models/table.dart';
 import '../../../core/database/table_dao.dart';
 import '../../../core/models/product.dart';
 import '../../../core/models/product_variant.dart';
+import '../../../core/models/bundle.dart';
+import '../../../core/models/bundle_item.dart';
 
 // Events
 abstract class CartEvent extends Equatable {
@@ -21,6 +24,12 @@ class CartAddItem extends CartEvent {
   final Product product;
   final ProductVariant? variant;
   CartAddItem(this.product, {this.variant});
+}
+
+class CartAddBundle extends CartEvent {
+  final Bundle bundle;
+  final List<BundleItem> items;
+  CartAddBundle(this.bundle, this.items);
 }
 
 class CartRemoveItem extends CartEvent {
@@ -97,7 +106,11 @@ class CartState extends Equatable {
 
   double get total => taxBase + taxAmount;
 
-  int get itemCount => items.fold(0, (sum, i) => sum + i.qty);
+  int get itemCount {
+    final regular = items.where((i) => i.bundleId == null).fold(0, (sum, i) => sum + i.qty);
+    final bundles = items.where((i) => i.bundleId != null).map((i) => i.bundleId).toSet().length;
+    return regular + bundles;
+  }
 
   CartState copyWith({List<CartItem>? items, Discount? discount, bool clearDiscount = false, double? taxPercent, Customer? customer, bool clearCustomer = false, int? draftOrderId, bool clearDraftOrderId = false, RestoTable? table, bool clearTable = false, String? note, bool clearNote = false}) =>
       CartState(
@@ -122,6 +135,7 @@ class CartBloc extends Bloc<CartEvent, CartState> {
 
   CartBloc(this._orderDao, this._productDao, this._customerDao) : super(const CartState()) {
     on<CartAddItem>(_onAdd);
+    on<CartAddBundle>(_onAddBundle);
     on<CartRemoveItem>(_onRemove);
     on<CartUpdateQty>(_onUpdateQty);
     on<CartApplyDiscount>(_onDiscount);
@@ -162,6 +176,38 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     emit(state.copyWith(items: items));
   }
 
+  void _onAddBundle(CartAddBundle e, Emitter<CartState> emit) {
+    final items = List<CartItem>.from(state.items);
+    final totalNormal = e.items.fold<double>(
+      0,
+      (sum, bi) => sum + (bi.product!.price * bi.qty),
+    );
+    for (final bi in e.items) {
+      if (bi.product == null) continue;
+      final adjustedPrice = totalNormal > 0
+          ? ((e.bundle.price * (bi.product!.price * bi.qty) / totalNormal) / bi.qty).toDouble()
+          : 0.0;
+      final key = CartItem(
+        product: bi.product!,
+        bundleId: e.bundle.id,
+        bundleName: e.bundle.name,
+      ).cartKey;
+      final idx = items.indexWhere((i) => i.cartKey == key);
+      if (idx >= 0) {
+        items[idx] = items[idx].copyWith(qty: items[idx].qty + bi.qty);
+      } else {
+        items.add(CartItem(
+          product: bi.product!,
+          qty: bi.qty,
+          bundleId: e.bundle.id,
+          bundleName: e.bundle.name,
+          bundleAdjustedPrice: adjustedPrice,
+        ));
+      }
+    }
+    emit(state.copyWith(items: items));
+  }
+
   void _onRemove(CartRemoveItem e, Emitter<CartState> emit) {
     final items =
         state.items.where((i) => i.cartKey != e.cartKey).toList();
@@ -191,110 +237,127 @@ class CartBloc extends Bloc<CartEvent, CartState> {
   }
 
   Future<void> _onSaveDraft(CartSaveDraft e, Emitter<CartState> emit) async {
-    final now = DateTime.now();
-    final items = state.items
-        .map((i) => OrderItem(
-              orderId: 0,
-              productId: i.product.id!,
-              productName: i.product.name,
-              variantName: i.variant?.name,
-              price: i.effectivePrice,
-              qty: i.qty,
-              subtotal: i.subtotal,
-            ))
-        .toList();
-    
-    // If existing draft, update it
-    if (state.draftOrderId != null) {
-      final order = Order(
-        id: state.draftOrderId,
-        orderNumber: 'DRF${now.millisecondsSinceEpoch}',
-        userId: e.userId,
-        shiftId: e.shiftId,
-        customerId: state.customer?.id,
-        tableId: state.table?.id,
-        note: state.note,
-        subtotal: state.subtotal,
-        discountAmount: state.discountAmount,
-        discountType: state.discount?.type.name,
-        discountValue: state.discount?.value ?? 0,
-        taxPercent: state.taxPercent,
-        taxAmount: state.taxAmount,
-        total: state.total,
-        createdAt: now.toIso8601String(),
-      );
-      await _orderDao.updateDraftOrder(state.draftOrderId!, order, items);
-      emit(CartState(taxPercent: state.taxPercent, draftOrderId: state.draftOrderId));
-    } else {
-      // New draft
-      final order = Order(
-        orderNumber: 'DRF${now.millisecondsSinceEpoch}',
-        userId: e.userId,
-        shiftId: e.shiftId,
-        customerId: state.customer?.id,
-        tableId: state.table?.id,
-        note: state.note,
-        subtotal: state.subtotal,
-        discountAmount: state.discountAmount,
-        discountType: state.discount?.type.name,
-        discountValue: state.discount?.value ?? 0,
-        taxPercent: state.taxPercent,
-        taxAmount: state.taxAmount,
-        total: state.total,
-        createdAt: now.toIso8601String(),
-      );
-      final orderId = await _orderDao.insertDraftOrder(order, items);
-      emit(CartState(taxPercent: state.taxPercent, draftOrderId: orderId));
+    try {
+      final now = DateTime.now();
+      final items = state.items
+          .map((i) => OrderItem(
+                orderId: 0,
+                productId: i.product.id!,
+                productName: i.product.name,
+                variantName: i.variant?.name,
+                price: i.effectivePrice,
+                qty: i.qty,
+                subtotal: i.subtotal,
+                bundleName: i.bundleName,
+                bundleId: i.bundleId,
+                bundleAdjustedPrice: i.bundleAdjustedPrice,
+              ))
+          .toList();
+      
+      // If existing draft, update it
+      if (state.draftOrderId != null) {
+        final order = Order(
+          id: state.draftOrderId,
+          orderNumber: 'DRF${now.millisecondsSinceEpoch}',
+          userId: e.userId,
+          shiftId: e.shiftId,
+          customerId: state.customer?.id,
+          tableId: state.table?.id,
+          note: state.note,
+          subtotal: state.subtotal,
+          discountAmount: state.discountAmount,
+          discountType: state.discount?.type.name,
+          discountValue: state.discount?.value ?? 0,
+          taxPercent: state.taxPercent,
+          taxAmount: state.taxAmount,
+          total: state.total,
+          createdAt: now.toIso8601String(),
+        );
+        await _orderDao.updateDraftOrder(state.draftOrderId!, order, items);
+        emit(CartState(taxPercent: state.taxPercent));
+      } else {
+        // New draft
+        final order = Order(
+          orderNumber: 'DRF${now.millisecondsSinceEpoch}',
+          userId: e.userId,
+          shiftId: e.shiftId,
+          customerId: state.customer?.id,
+          tableId: state.table?.id,
+          note: state.note,
+          subtotal: state.subtotal,
+          discountAmount: state.discountAmount,
+          discountType: state.discount?.type.name,
+          discountValue: state.discount?.value ?? 0,
+          taxPercent: state.taxPercent,
+          taxAmount: state.taxAmount,
+          total: state.total,
+          createdAt: now.toIso8601String(),
+        );
+        await _orderDao.insertDraftOrder(order, items);
+        emit(CartState(taxPercent: state.taxPercent));
+      }
+    } catch (err) {
+      debugPrint('Error saving draft: $err');
     }
   }
 
   Future<void> _onLoadDraft(CartLoadDraft e, Emitter<CartState> emit) async {
-    final cartItems = <CartItem>[];
-    for (final oi in e.items) {
-      final product = await _productDao.getById(oi.productId);
-      if (product == null) continue;
-      ProductVariant? variant;
-      if (oi.variantName != null) {
-        variant = product.variants
-            .cast<ProductVariant?>()
-            .firstWhere((v) => v?.name == oi.variantName,
-                orElse: () => null);
+    try {
+      final cartItems = <CartItem>[];
+      for (final oi in e.items) {
+        final product = await _productDao.getById(oi.productId);
+        if (product == null) continue;
+        ProductVariant? variant;
+        if (oi.variantName != null) {
+          variant = product.variants
+              .cast<ProductVariant?>()
+              .firstWhere((v) => v?.name == oi.variantName,
+                  orElse: () => null);
+        }
+        cartItems.add(CartItem(
+          product: product,
+          variant: variant,
+          qty: oi.qty,
+          bundleId: oi.bundleId,
+          bundleName: oi.bundleName,
+          bundleAdjustedPrice: oi.bundleAdjustedPrice,
+        ));
       }
-      cartItems.add(CartItem(product: product, variant: variant, qty: oi.qty));
-    }
 
-    // Load discount
-    Discount? discount;
-    if (e.order.discountValue > 0 && e.order.discountType != null) {
-      discount = Discount(
-        type: e.order.discountType == 'percent'
-            ? DiscountType.percent
-            : DiscountType.nominal,
-        value: e.order.discountValue,
-      );
-    }
+      // Load discount
+      Discount? discount;
+      if (e.order.discountValue > 0 && e.order.discountType != null) {
+        discount = Discount(
+          type: e.order.discountType == 'percent'
+              ? DiscountType.percent
+              : DiscountType.nominal,
+          value: e.order.discountValue,
+        );
+      }
 
-    // Load table if draft has tableId
-    RestoTable? table;
-    if (e.order.tableId != null) {
-      table = await TableDao().getById(e.order.tableId!);
-    }
+      // Load table if draft has tableId
+      RestoTable? table;
+      if (e.order.tableId != null) {
+        table = await TableDao().getById(e.order.tableId!);
+      }
 
-    // Load customer if draft has customerId
-    Customer? customer;
-    if (e.order.customerId != null) {
-      customer = await _customerDao.getById(e.order.customerId!);
-    }
+      // Load customer if draft has customerId
+      Customer? customer;
+      if (e.order.customerId != null) {
+        customer = await _customerDao.getById(e.order.customerId!);
+      }
 
-    // Emit once with all data
-    emit(CartState(
-      items: cartItems,
-      discount: discount,
-      taxPercent: e.order.taxPercent,
-      draftOrderId: e.order.id,
-      table: table,
-      note: e.order.note,
-      customer: customer,
-    ));
+      emit(state.copyWith(
+        items: cartItems,
+        discount: discount,
+        taxPercent: e.order.taxPercent,
+        draftOrderId: e.order.id,
+        table: table,
+        note: e.order.note,
+        customer: customer,
+      ));
+    } catch (err) {
+      debugPrint('Error loading draft: $err');
+    }
   }
 }

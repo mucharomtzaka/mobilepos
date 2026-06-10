@@ -43,6 +43,9 @@ class OrderItem extends Equatable {
   final double price;
   final int qty;
   final double subtotal;
+  final String? bundleName;
+  final int? bundleId;
+  final double? bundleAdjustedPrice;
 
   const OrderItem({
     this.id,
@@ -53,6 +56,9 @@ class OrderItem extends Equatable {
     required this.price,
     required this.qty,
     required this.subtotal,
+    this.bundleName,
+    this.bundleId,
+    this.bundleAdjustedPrice,
   });
 
   factory OrderItem.fromMap(Map<String, dynamic> m) => OrderItem(
@@ -64,6 +70,9 @@ class OrderItem extends Equatable {
         price: (m['price'] as num).toDouble(),
         qty: m['qty'],
         subtotal: (m['subtotal'] as num).toDouble(),
+        bundleName: m['bundle_name'],
+        bundleId: m['bundle_id'],
+        bundleAdjustedPrice: m['bundle_adjusted_price'] != null ? (m['bundle_adjusted_price'] as num).toDouble() : null,
       );
 
   Map<String, dynamic> toMap() => {
@@ -75,12 +84,18 @@ class OrderItem extends Equatable {
         'price': price,
         'qty': qty,
         'subtotal': subtotal,
+        if (bundleName != null) 'bundle_name': bundleName,
+        if (bundleId != null) 'bundle_id': bundleId,
+        if (bundleAdjustedPrice != null) 'bundle_adjusted_price': bundleAdjustedPrice,
       };
 
-  String get displayName => variantName != null ? '$productName - $variantName' : productName;
+  String get displayName {
+    if (bundleName != null) return '$bundleName: $productName';
+    return variantName != null ? '$productName - $variantName' : productName;
+  }
 
   @override
-  List<Object?> get props => [id, productId, variantName, qty];
+  List<Object?> get props => [id, productId, variantName, qty, bundleName, bundleId, bundleAdjustedPrice];
 }
 
 class Order extends Equatable {

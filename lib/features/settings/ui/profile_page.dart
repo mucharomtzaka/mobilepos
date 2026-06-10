@@ -5,6 +5,7 @@ import '../../../core/database/user_dao.dart';
 import '../../../core/models/user.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../../core/utils/responsive_dialog.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -46,8 +47,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       prefixIcon: Icon(Icons.person),
                       border: OutlineInputBorder(),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Nama tidak boleh kosong' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Nama tidak boleh kosong'
+                        : null,
                   ),
                   if (isAdminOrMerchant) ...[
                     const SizedBox(height: 16),
@@ -60,7 +62,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       items: const [
                         DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                        DropdownMenuItem(value: 'merchant', child: Text('Merchant')),
+                        DropdownMenuItem(
+                            value: 'merchant', child: Text('Merchant')),
                         DropdownMenuItem(value: 'kasir', child: Text('Kasir')),
                       ],
                       onChanged: (v) {
@@ -88,7 +91,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (v) {
-                      if (newPassCtrl.text.isNotEmpty && (v == null || v.isEmpty)) {
+                      if (newPassCtrl.text.isNotEmpty &&
+                          (v == null || v.isEmpty)) {
                         return 'Masukkan password lama';
                       }
                       if (v != null && v.isNotEmpty && v != user.password) {
@@ -110,7 +114,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       if (v != null && v.isNotEmpty && v.length < 4) {
                         return 'Minimal 4 karakter';
                       }
-                      if (v != null && v.isNotEmpty && oldPassCtrl.text.isEmpty) {
+                      if (v != null &&
+                          v.isNotEmpty &&
+                          oldPassCtrl.text.isEmpty) {
                         return 'Isi password lama terlebih dahulu';
                       }
                       return null;
@@ -126,8 +132,9 @@ class _ProfilePageState extends State<ProfilePage> {
                         prefixIcon: Icon(Icons.lock),
                         border: OutlineInputBorder(),
                       ),
-                      validator: (v) =>
-                          (v != newPassCtrl.text) ? 'Password tidak cocok' : null,
+                      validator: (v) => (v != newPassCtrl.text)
+                          ? 'Password tidak cocok'
+                          : null,
                     ),
                   ],
                 ],
@@ -146,7 +153,8 @@ class _ProfilePageState extends State<ProfilePage> {
                       if (!formKey.currentState!.validate()) return;
                       setDialogState(() => saving = true);
 
-                      final isAdminOrMerchant = user.role == 'admin' || user.role == 'merchant';
+                      final isAdminOrMerchant =
+                          user.role == 'admin' || user.role == 'merchant';
                       final updated = User(
                         id: user.id,
                         name: nameCtrl.text.trim(),
@@ -198,9 +206,8 @@ class _ProfilePageState extends State<ProfilePage> {
     final user = authState.user;
     final theme = Theme.of(context);
 
-    final initial = user.name.isNotEmpty
-        ? user.name.substring(0, 1).toUpperCase()
-        : '?';
+    final initial =
+        user.name.isNotEmpty ? user.name.substring(0, 1).toUpperCase() : '?';
 
     final createdAt = DateTime.tryParse(user.createdAt) ?? DateTime.now();
     final dateStr = DateFormat('dd MMMM yyyy').format(createdAt);
@@ -217,7 +224,12 @@ class _ProfilePageState extends State<ProfilePage> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        padding: ResponsivePageInsets.content(
+          context,
+          maxContentWidth: 720,
+          top: 24,
+          bottom: 24,
+        ),
         children: [
           Center(
             child: Column(
@@ -252,9 +264,17 @@ class _ProfilePageState extends State<ProfilePage> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    user.role == 'admin' ? 'Admin' : user.role == 'merchant' ? 'Merchant' : 'Kasir',
+                    user.role == 'admin'
+                        ? 'Admin'
+                        : user.role == 'merchant'
+                            ? 'Merchant'
+                            : 'Kasir',
                     style: TextStyle(
-                      color: user.role == 'admin' ? Colors.amber[800] : user.role == 'merchant' ? Colors.purple : Colors.blue,
+                      color: user.role == 'admin'
+                          ? Colors.amber[800]
+                          : user.role == 'merchant'
+                              ? Colors.purple
+                              : Colors.blue,
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
@@ -273,7 +293,14 @@ class _ProfilePageState extends State<ProfilePage> {
               const Divider(height: 1),
               _infoRow(Icons.account_circle, 'Username', user.username),
               const Divider(height: 1),
-              _infoRow(Icons.badge, 'Role', user.role == 'admin' ? 'Admin' : user.role == 'merchant' ? 'Merchant' : 'Kasir'),
+              _infoRow(
+                  Icons.badge,
+                  'Role',
+                  user.role == 'admin'
+                      ? 'Admin'
+                      : user.role == 'merchant'
+                          ? 'Merchant'
+                          : 'Kasir'),
               const Divider(height: 1),
               _infoRow(Icons.calendar_today, 'Bergabung', dateStr),
               const Divider(height: 1),
@@ -306,7 +333,8 @@ class _ProfilePageState extends State<ProfilePage> {
                         onPressed: () {
                           Navigator.pop(ctx);
                           context.read<AuthBloc>().add(AuthLogoutRequested());
-                          Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                          Navigator.pushNamedAndRemoveUntil(
+                              context, '/login', (route) => false);
                         },
                         style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.red),
@@ -330,8 +358,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _infoCard(BuildContext context,
-      {required List<Widget> children}) {
+  Widget _infoCard(BuildContext context, {required List<Widget> children}) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
@@ -347,11 +374,14 @@ class _ProfilePageState extends State<ProfilePage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(icon,
+              size: 20, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 12),
           Text(label,
               style: TextStyle(
-                  fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500)),
           const Spacer(),
           Text(
             value,

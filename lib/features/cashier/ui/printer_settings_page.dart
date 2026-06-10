@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import '../../../core/utils/bluetooth_printer.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 
 class PrinterSettingsPage extends StatefulWidget {
   const PrinterSettingsPage({super.key});
@@ -118,6 +119,7 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
         ],
       ),
       body: ListView(
+        padding: ResponsivePageInsets.horizontal(context, maxContentWidth: 820),
         children: [
           // Saved / active printer card
           if (savedId != null)
@@ -129,11 +131,12 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                     color: connected ? Colors.green : Colors.orange),
                 title: Text(savedName ?? savedId,
                     style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(connected ? 'Terhubung ✓' : 'Tersimpan (belum terhubung)'),
+                subtitle: Text(
+                    connected ? 'Terhubung ✓' : 'Tersimpan (belum terhubung)'),
                 trailing: TextButton(
                   onPressed: _disconnect,
-                  child: const Text('Hapus',
-                      style: TextStyle(color: Colors.red)),
+                  child:
+                      const Text('Hapus', style: TextStyle(color: Colors.red)),
                 ),
               ),
             )
@@ -148,14 +151,14 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Text('Perangkat Tersedia',
-                style:
-                    TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           ),
 
           if (_devices.isEmpty && !_scanning)
             const Padding(
               padding: EdgeInsets.all(16),
-              child: Text('Tidak ada perangkat ditemukan.\nPastikan Bluetooth aktif dan printer sudah menyala.',
+              child: Text(
+                  'Tidak ada perangkat ditemukan.\nPastikan Bluetooth aktif dan printer sudah menyala.',
                   style: TextStyle(color: Colors.grey)),
             ),
 

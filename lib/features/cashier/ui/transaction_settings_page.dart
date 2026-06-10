@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../../core/utils/receipt_settings.dart';
 import '../../../core/database/settings_dao.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 
 class TransactionSettingsPage extends StatefulWidget {
   const TransactionSettingsPage({super.key});
   @override
-  State<TransactionSettingsPage> createState() => _TransactionSettingsPageState();
+  State<TransactionSettingsPage> createState() =>
+      _TransactionSettingsPageState();
 }
 
 class _TransactionSettingsPageState extends State<TransactionSettingsPage> {
@@ -67,7 +69,12 @@ class _TransactionSettingsPageState extends State<TransactionSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Pengaturan Transaksi')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: ResponsivePageInsets.content(
+          context,
+          maxContentWidth: 720,
+          top: 16,
+          bottom: 16,
+        ),
         children: [
           const Text('Kelola Stok',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),

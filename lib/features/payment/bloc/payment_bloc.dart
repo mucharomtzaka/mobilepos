@@ -147,6 +147,7 @@ class PaymentBloc extends Bloc<PaymentEvent, PaymentState> {
                 price: i.effectivePrice,
                 qty: i.qty,
                 subtotal: i.subtotal,
+                bundleName: i.bundleName,
               ))
           .toList();
       await _orderDao.insertItems(items);

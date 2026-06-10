@@ -39,61 +39,61 @@ class _CartPageState extends State<CartPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('Keranjang'),
-          actions: [
-            BlocBuilder<CartBloc, CartState>(
-              builder: (ctx, state) => state.items.isEmpty
-                  ? const SizedBox()
-                  : Container(
-                      margin: const EdgeInsets.only(right: 4),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.delete_sweep),
-                        tooltip: 'Kosongkan',
-                        onPressed: () => ctx.read<CartBloc>().add(CartClear()),
-                      ),
+      appBar: AppBar(
+        title: const Text('Keranjang'),
+        actions: [
+          BlocBuilder<CartBloc, CartState>(
+            builder: (ctx, state) => state.items.isEmpty
+                ? const SizedBox()
+                : Container(
+                    margin: const EdgeInsets.only(right: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-            ),
-            Container(
-              margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: FutureBuilder<int>(
-                key: ValueKey(_draftCountKey),
-                future: OrderDao().getDraftOrders().then((l) => l.length),
-                builder: (_, snap) {
-                  final count = snap.data ?? 0;
-                  return Badge(
-                    isLabelVisible: count > 0,
-                    label: Text('$count'),
                     child: IconButton(
-                      icon: const Icon(Icons.inbox),
-                      tooltip: 'Ambil Draft',
-                      onPressed: () => _pickupDraft(context),
+                      icon: const Icon(Icons.delete_sweep),
+                      tooltip: 'Kosongkan',
+                      onPressed: () => ctx.read<CartBloc>().add(CartClear()),
                     ),
-                  );
-                },
-              ),
+                  ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(right: 4),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
             ),
-            Container(
-              margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.qr_code_scanner),
-                onPressed: () => _scanBarcode(context),
-              ),
+            child: FutureBuilder<int>(
+              key: ValueKey(_draftCountKey),
+              future: OrderDao().getDraftOrders().then((l) => l.length),
+              builder: (_, snap) {
+                final count = snap.data ?? 0;
+                return Badge(
+                  isLabelVisible: count > 0,
+                  label: Text('$count'),
+                  child: IconButton(
+                    icon: const Icon(Icons.inbox),
+                    tooltip: 'Ambil Draft',
+                    onPressed: () => _pickupDraft(context),
+                  ),
+                );
+              },
             ),
-          ],
-        ),
+          ),
+          Container(
+            margin: const EdgeInsets.only(right: 4),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.qr_code_scanner),
+              onPressed: () => _scanBarcode(context),
+            ),
+          ),
+        ],
+      ),
       body: LayoutBuilder(
         builder: (ctx, constraints) {
           final isKeyboard = MediaQuery.of(ctx).viewInsets.bottom > 0;
@@ -129,7 +129,8 @@ class _CartPageState extends State<CartPage> {
       if (ctx.mounted) {
         ScaffoldMessenger.of(ctx).showSnackBar(
           SnackBar(
-            content: const Text('Izin kamera ditolak permanen. Izinkan di pengaturan aplikasi.'),
+            content: const Text(
+                'Izin kamera ditolak permanen. Izinkan di pengaturan aplikasi.'),
             action: SnackBarAction(
               label: 'Buka Pengaturan',
               onPressed: openAppSettings,
@@ -207,21 +208,162 @@ class _CartItemList extends StatelessWidget {
                     border: Border.all(color: Colors.grey.shade300),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(Icons.shopping_cart_outlined, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  child: Icon(Icons.shopping_cart_outlined,
+                      size: 64,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 8),
-                Text('Keranjang kosong', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                Text('Keranjang kosong',
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ],
             ),
           );
         }
-        return ListView.builder(
-          itemCount: state.items.length,
-          itemBuilder: (_, i) => _CartItemTile(item: state.items[i]),
-        );
+        return ListView(children: _buildItemList(ctx, state.items));
       },
     );
   }
+
+  List<Widget> _buildItemList(BuildContext ctx, List<CartItem> items) {
+    final list = <Widget>[];
+    int i = 0;
+    while (i < items.length) {
+      if (items[i].bundleId != null) {
+        final bundleId = items[i].bundleId;
+        final bundleName = items[i].bundleName!;
+        final group = <CartItem>[];
+        while (i < items.length && items[i].bundleId == bundleId) {
+          group.add(items[i]);
+          i++;
+        }
+        final instances = group.map((i) => i.qty).reduce(_gcd);
+        list.add(_BundleGroupHeader(
+            bundleName: bundleName, group: group, instances: instances));
+        for (final item in group) {
+          list.add(_BundleItemRow(item: item, instances: instances));
+        }
+        list.add(_BundleGroupTotal(group: group, instances: instances));
+      } else {
+        list.add(_CartItemTile(item: items[i]));
+        i++;
+      }
+    }
+    return list;
+  }
+}
+
+class _BundleGroupHeader extends StatelessWidget {
+  final String bundleName;
+  final List<CartItem> group;
+  final int instances;
+  const _BundleGroupHeader(
+      {required this.bundleName, required this.group, required this.instances});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = group.fold<double>(0, (s, i) => s + i.subtotal);
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.orange, width: 2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.redeem, size: 16, color: Colors.orange),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(bundleName,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.orange)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BundleItemRow extends StatelessWidget {
+  final CartItem item;
+  final int instances;
+  const _BundleItemRow({required this.item, required this.instances});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 22),
+          Text('${item.qty ~/ instances}x ',
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Expanded(
+            child: Text(item.product.name,
+                style: const TextStyle(fontSize: 13),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BundleGroupTotal extends StatelessWidget {
+  final List<CartItem> group;
+  final int instances;
+  const _BundleGroupTotal({required this.group, required this.instances});
+
+  @override
+  Widget build(BuildContext context) {
+    final totalBundle = group.fold<double>(0, (s, i) => s + i.subtotal);
+    final bundlePrice = totalBundle / instances;
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.orange.shade200)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 22),
+            child: Text('${instances}x ${fmt.format(bundlePrice)}',
+                style:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+          const Divider(height: 12),
+          Row(
+            children: [
+              const Spacer(),
+              Text(fmt.format(totalBundle),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 14)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+int _gcd(int a, int b) {
+  while (b != 0) {
+    final t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
 }
 
 class _CustomerBar extends StatelessWidget {
@@ -257,8 +399,9 @@ class _CustomerBar extends StatelessWidget {
                   child: Text(
                     state.customer?.name ?? 'Pelanggan (opsional)',
                     style: TextStyle(
-                      fontWeight:
-                          state.customer != null ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: state.customer != null
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       color: state.customer != null ? null : Colors.grey,
                     ),
                   ),
@@ -266,7 +409,8 @@ class _CustomerBar extends StatelessWidget {
                 if (state.customer != null)
                   IconButton(
                     icon: const Icon(Icons.close, size: 18),
-                    onPressed: () => ctx.read<CartBloc>().add(CartSetCustomer(null)),
+                    onPressed: () =>
+                        ctx.read<CartBloc>().add(CartSetCustomer(null)),
                   )
                 else
                   TextButton(
@@ -288,6 +432,7 @@ class _TableBar extends StatelessWidget {
     if (!ctx.mounted) return;
     showConstrainedModalBottomSheet(
       context: ctx,
+      isScrollControlled: true,
       builder: (_) => _TablePickerSheet(
         tables: tables,
         onSelected: (table) {
@@ -318,7 +463,9 @@ class _TableBar extends StatelessWidget {
                   child: Text(
                     state.table?.name ?? 'Meja (opsional)',
                     style: TextStyle(
-                      fontWeight: state.table != null ? FontWeight.bold : FontWeight.normal,
+                      fontWeight: state.table != null
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       color: state.table != null ? null : Colors.grey,
                     ),
                   ),
@@ -326,7 +473,8 @@ class _TableBar extends StatelessWidget {
                 if (state.table != null)
                   IconButton(
                     icon: const Icon(Icons.close, size: 18),
-                    onPressed: () => ctx.read<CartBloc>().add(CartSetTable(null)),
+                    onPressed: () =>
+                        ctx.read<CartBloc>().add(CartSetTable(null)),
                   )
                 else
                   TextButton(
@@ -366,81 +514,104 @@ class _TablePickerSheetState extends State<_TablePickerSheet> {
       if (q.isEmpty) {
         _filtered = widget.tables;
       } else {
-        _filtered = widget.tables.where((t) =>
-          t.name.toLowerCase().contains(q.toLowerCase()) ||
-          (t.note?.toLowerCase().contains(q.toLowerCase()) ?? false)
-        ).toList();
+        _filtered = widget.tables
+            .where((t) =>
+                t.name.toLowerCase().contains(q.toLowerCase()) ||
+                (t.note?.toLowerCase().contains(q.toLowerCase()) ?? false))
+            .toList();
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Pilih Meja', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _searchCtrl,
-              decoration: InputDecoration(
-                hintText: 'Cari meja...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              onChanged: _filter,
-            ),
-            const SizedBox(height: 12),
-            if (_filtered.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: Text('Tidak ada meja', style: TextStyle(color: Colors.grey))),
-              )
-            else
-              Flexible(
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    childAspectRatio: 1,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
+    return Material(
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Pilih Meja',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Cari meja...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
-                  itemCount: _filtered.length,
-                  itemBuilder: (ctx, i) {
-                    final t = _filtered[i];
-                    return InkWell(
-                      onTap: () => widget.onSelected(t),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.all(8),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(t.name, style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 4),
-                            Text('${t.capacity} kursi', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                            if (t.note != null) ...[
-                              const SizedBox(height: 4),
-                              Text(t.note!, style: TextStyle(fontSize: 10, color: Colors.grey.shade500), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                  onChanged: _filter,
                 ),
-              ),
-          ],
+                const SizedBox(height: 12),
+                if (_filtered.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(
+                        child: Text('Tidak ada meja',
+                            style: TextStyle(color: Colors.grey))),
+                  )
+                else
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 1,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    itemCount: _filtered.length,
+                    itemBuilder: (ctx, i) {
+                      final t = _filtered[i];
+                      return InkWell(
+                        onTap: () => widget.onSelected(t),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(t.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                  textAlign: TextAlign.center,
+                                  overflow: TextOverflow.ellipsis),
+                              const SizedBox(height: 4),
+                              Text('${t.capacity} kursi',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600)),
+                              if (t.note != null) ...[
+                                const SizedBox(height: 4),
+                                Text(t.note!,
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -453,7 +624,8 @@ class _CartItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
     return Container(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
@@ -469,6 +641,10 @@ class _CartItemTile extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
+                if (item.bundleName != null)
+                  Text(item.bundleName!,
+                      style:
+                          const TextStyle(color: Colors.orange, fontSize: 11)),
                 if (item.variant != null)
                   Text(item.variant!.name,
                       style: const TextStyle(color: Colors.blue, fontSize: 11)),
@@ -477,24 +653,33 @@ class _CartItemTile extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(4),
-            icon: const Icon(Icons.remove_circle_outline, size: 22),
-            onPressed: () => context
-                .read<CartBloc>()
-                .add(CartUpdateQty(item.cartKey, item.qty - 1)),
-          ),
-          Text('${item.qty}',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          IconButton(
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(4),
-            icon: const Icon(Icons.add_circle_outline, size: 22),
-            onPressed: () => context
-                .read<CartBloc>()
-                .add(CartUpdateQty(item.cartKey, item.qty + 1)),
-          ),
+          if (item.bundleId == null) ...[
+            IconButton(
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(4),
+              icon: const Icon(Icons.remove_circle_outline, size: 22),
+              onPressed: () => context
+                  .read<CartBloc>()
+                  .add(CartUpdateQty(item.cartKey, item.qty - 1)),
+            ),
+            Text('${item.qty}',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            IconButton(
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(4),
+              icon: const Icon(Icons.add_circle_outline, size: 22),
+              onPressed: () => context
+                  .read<CartBloc>()
+                  .add(CartUpdateQty(item.cartKey, item.qty + 1)),
+            ),
+          ] else
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text('${item.qty}x',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
           const SizedBox(width: 4),
           SizedBox(
             width: 90,
@@ -522,7 +707,8 @@ class _DiscountBar extends StatelessWidget {
               Text(
                 state.discount!.type == DiscountType.percent
                     ? '${state.discount!.value.toStringAsFixed(0)}%'
-                    : NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0)
+                    : NumberFormat.currency(
+                            locale: 'id', symbol: 'Rp ', decimalDigits: 0)
                         .format(state.discount!.value),
                 style: const TextStyle(
                     color: Colors.green, fontWeight: FontWeight.bold),
@@ -575,8 +761,10 @@ class _DiscountBar extends StatelessWidget {
             children: [
               SegmentedButton<DiscountType>(
                 segments: const [
-                  ButtonSegment(value: DiscountType.percent, label: Text('Persen (%)')),
-                  ButtonSegment(value: DiscountType.nominal, label: Text('Nominal')),
+                  ButtonSegment(
+                      value: DiscountType.percent, label: Text('Persen (%)')),
+                  ButtonSegment(
+                      value: DiscountType.nominal, label: Text('Nominal')),
                 ],
                 selected: {type},
                 onSelectionChanged: (s) {
@@ -589,7 +777,8 @@ class _DiscountBar extends StatelessWidget {
                       if (raw != ctrl.text) {
                         ctrl.value = TextEditingValue(
                           text: raw,
-                          selection: TextSelection.collapsed(offset: raw.length),
+                          selection:
+                              TextSelection.collapsed(offset: raw.length),
                         );
                       }
                     }
@@ -660,7 +849,9 @@ class _NoteBar extends StatelessWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              ctx.read<CartBloc>().add(CartSetNote(ctrl.text.isEmpty ? null : ctrl.text));
+              ctx
+                  .read<CartBloc>()
+                  .add(CartSetNote(ctrl.text.isEmpty ? null : ctrl.text));
               Navigator.pop(dCtx);
             },
             child: const Text('Simpan'),
@@ -688,7 +879,8 @@ class _NoteBar extends StatelessWidget {
               child: Text(
                 state.note ?? 'Catatan (opsional)',
                 style: TextStyle(
-                  fontWeight: state.note != null ? FontWeight.bold : FontWeight.normal,
+                  fontWeight:
+                      state.note != null ? FontWeight.bold : FontWeight.normal,
                   color: state.note != null ? null : Colors.grey,
                 ),
                 maxLines: 1,
@@ -716,7 +908,7 @@ class _NoteBar extends StatelessWidget {
 
 class _CartSummary extends StatelessWidget {
   final VoidCallback? onDraftSaved;
-  
+
   const _CartSummary({this.onDraftSaved});
 
   void _saveDraft(BuildContext ctx) {
@@ -747,7 +939,8 @@ class _CartSummary extends StatelessWidget {
           context: ctx,
           builder: (dCtx) => AlertDialog(
             title: const Text('Bluetooth Mati'),
-            content: const Text('Nyalakan Bluetooth untuk mencetak struk sementara.'),
+            content: const Text(
+                'Nyalakan Bluetooth untuk mencetak struk sementara.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dCtx),
@@ -807,6 +1000,7 @@ class _CartSummary extends StatelessWidget {
               price: i.effectivePrice,
               qty: i.qty,
               subtotal: i.subtotal,
+              bundleName: i.bundleName,
             ))
         .toList();
 
@@ -835,7 +1029,8 @@ class _CartSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<CartBloc, CartState>(
       builder: (ctx, state) {
-        final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+        final fmt = NumberFormat.currency(
+            locale: 'id', symbol: 'Rp ', decimalDigits: 0);
         final bottomPadding = MediaQuery.of(ctx).padding.bottom;
         return Container(
           padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomPadding),
@@ -862,8 +1057,7 @@ class _CartSummary extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Diskon',
-                        style: TextStyle(color: Colors.green)),
+                    const Text('Diskon', style: TextStyle(color: Colors.green)),
                     Text('- ${fmt.format(state.discountAmount)}',
                         style: const TextStyle(color: Colors.green)),
                   ],
@@ -882,8 +1076,8 @@ class _CartSummary extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Total',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold)),
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   Text(fmt.format(state.total),
                       style: const TextStyle(
                           fontSize: 18, fontWeight: FontWeight.bold)),
@@ -894,7 +1088,9 @@ class _CartSummary extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: state.items.isEmpty ? null : () => _printTempReceipt(ctx),
+                      onPressed: state.items.isEmpty
+                          ? null
+                          : () => _printTempReceipt(ctx),
                       icon: const Icon(Icons.print, size: 18),
                       label: const Text('Cetak'),
                     ),
@@ -902,7 +1098,8 @@ class _CartSummary extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: state.items.isEmpty ? null : () => _saveDraft(ctx),
+                      onPressed:
+                          state.items.isEmpty ? null : () => _saveDraft(ctx),
                       icon: const Icon(Icons.save, size: 18),
                       label: const Text('Simpan Draft'),
                     ),
@@ -1058,8 +1255,10 @@ class _ScannerOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final outerPath = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
-    final innerPath = Path()..addRRect(RRect.fromRectAndRadius(scanRect, const Radius.circular(16)));
+    final outerPath = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final innerPath = Path()
+      ..addRRect(RRect.fromRectAndRadius(scanRect, const Radius.circular(16)));
     final path = Path.combine(PathOperation.difference, outerPath, innerPath);
 
     // Background gelap di luar area scan
@@ -1181,7 +1380,8 @@ class _DraftPickerSheetState extends State<_DraftPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
     final dateFmt = DateFormat('dd/MM/yyyy HH:mm');
     return SafeArea(
       child: Column(
@@ -1195,7 +1395,8 @@ class _DraftPickerSheetState extends State<_DraftPickerSheet> {
                 const Icon(Icons.inbox),
                 const SizedBox(width: 8),
                 const Text('Ambil Draft',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
@@ -1208,7 +1409,8 @@ class _DraftPickerSheetState extends State<_DraftPickerSheet> {
             child: _drafts.isEmpty
                 ? const Center(child: Text('Tidak ada draft'))
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: _drafts.length,
                     itemBuilder: (_, i) {
                       final order = _drafts[i];
@@ -1216,7 +1418,8 @@ class _DraftPickerSheetState extends State<_DraftPickerSheet> {
                         margin: const EdgeInsets.only(bottom: 12),
                         child: InkWell(
                           onTap: () async {
-                            final items = await widget.dao.getItemsByOrderId(order.id!);
+                            final items =
+                                await widget.dao.getItemsByOrderId(order.id!);
                             widget.onPicked(order, items);
                           },
                           borderRadius: BorderRadius.circular(12),
@@ -1228,18 +1431,23 @@ class _DraftPickerSheetState extends State<_DraftPickerSheet> {
                                   width: 48,
                                   height: 48,
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primaryContainer,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Icon(
                                     Icons.receipt_long,
-                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer,
                                   ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         order.orderNumber,
@@ -1250,9 +1458,12 @@ class _DraftPickerSheetState extends State<_DraftPickerSheet> {
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        dateFmt.format(DateTime.parse(order.createdAt)),
+                                        dateFmt.format(
+                                            DateTime.parse(order.createdAt)),
                                         style: TextStyle(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
                                           fontSize: 12,
                                         ),
                                       ),
@@ -1260,7 +1471,9 @@ class _DraftPickerSheetState extends State<_DraftPickerSheet> {
                                       Text(
                                         fmt.format(order.total),
                                         style: TextStyle(
-                                          color: Theme.of(context).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 14,
                                         ),
@@ -1324,13 +1537,12 @@ class _BluetoothPickerSheetState extends State<_BluetoothPickerSheet> {
             Row(
               children: [
                 const Text('Pilih Printer Bluetooth',
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold)),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 if (_scanning) const CircularProgressIndicator(strokeWidth: 2),
                 if (!_scanning)
-                  IconButton(
-                      onPressed: _scan, icon: const Icon(Icons.refresh)),
+                  IconButton(onPressed: _scan, icon: const Icon(Icons.refresh)),
               ],
             ),
             const Divider(),
@@ -1341,7 +1553,9 @@ class _BluetoothPickerSheetState extends State<_BluetoothPickerSheet> {
                 children: [
                   ..._devices.map((d) => ListTile(
                         leading: const Icon(Icons.print),
-                        title: Text(d.platformName.isEmpty ? d.remoteId.str : d.platformName),
+                        title: Text(d.platformName.isEmpty
+                            ? d.remoteId.str
+                            : d.platformName),
                         onTap: () async {
                           await BluetoothPrinter.connect(d);
                           widget.onConnected();
@@ -1383,19 +1597,22 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
 
   Future<void> _load() async {
     final list = await _dao.getAll();
-    if (mounted) setState(() {
-      _customers = list;
-      _filtered = list;
-    });
+    if (mounted)
+      setState(() {
+        _customers = list;
+        _filtered = list;
+      });
   }
 
   void _onSearch(String v) {
     if (v.isEmpty) {
       setState(() => _filtered = _customers);
     } else {
-      setState(() => _filtered = _customers.where((c) =>
-          c.name.toLowerCase().contains(v.toLowerCase()) ||
-          (c.phone?.contains(v) ?? false)).toList());
+      setState(() => _filtered = _customers
+          .where((c) =>
+              c.name.toLowerCase().contains(v.toLowerCase()) ||
+              (c.phone?.contains(v) ?? false))
+          .toList());
     }
   }
 
@@ -1436,12 +1653,15 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
             onPressed: () {
               if (nameCtrl.text.trim().isEmpty) return;
               final now = DateTime.now().toIso8601String();
-              Navigator.pop(dCtx, Customer(
-                name: nameCtrl.text.trim(),
-                phone: phoneCtrl.text.trim().isEmpty
-                    ? null : phoneCtrl.text.trim(),
-                createdAt: now,
-              ));
+              Navigator.pop(
+                  dCtx,
+                  Customer(
+                    name: nameCtrl.text.trim(),
+                    phone: phoneCtrl.text.trim().isEmpty
+                        ? null
+                        : phoneCtrl.text.trim(),
+                    createdAt: now,
+                  ));
             },
             child: const Text('Simpan'),
           ),
@@ -1450,8 +1670,11 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
     );
     if (result != null) {
       final id = await _dao.insert(result);
-      final saved = Customer(id: id, name: result.name,
-          phone: result.phone, createdAt: result.createdAt);
+      final saved = Customer(
+          id: id,
+          name: result.name,
+          phone: result.phone,
+          createdAt: result.createdAt);
       if (mounted) _searchCtrl.text = saved.name;
       widget.onSelected(saved);
     }
@@ -1471,7 +1694,8 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
                 const Icon(Icons.person),
                 const SizedBox(width: 8),
                 const Text('Pilih Pelanggan',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
@@ -1502,39 +1726,53 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
             const SizedBox(height: 4),
             Expanded(
               child: _filtered.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.person_off,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ? LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact = constraints.maxHeight < 110;
+                        final color =
+                            Theme.of(context).colorScheme.onSurfaceVariant;
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.person_off,
+                                size: compact ? 36 : 64,
+                                color: color,
+                              ),
+                              SizedBox(height: compact ? 4 : 8),
+                              Text(
+                                _searchCtrl.text.trim().isNotEmpty
+                                    ? 'Pelanggan tidak ditemukan'
+                                    : 'Tidak ada pelanggan',
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: compact ? 12 : 14,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _searchCtrl.text.trim().isNotEmpty
-                                ? 'Pelanggan tidak ditemukan'
-                                : 'Tidak ada pelanggan',
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     )
                   : ListView.builder(
                       itemCount: _filtered.length,
                       itemBuilder: (_, i) {
                         final c = _filtered[i];
                         return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer,
                               child: Text(
                                 c.name[0].toUpperCase(),
                                 style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer,
                                 ),
                               ),
                             ),

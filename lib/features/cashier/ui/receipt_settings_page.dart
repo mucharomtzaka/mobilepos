@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../../../core/utils/custom_image_picker.dart';
 import '../../../core/utils/receipt_settings.dart';
 import '../../../core/utils/responsive_dialog.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 
 class ReceiptSettingsPage extends StatefulWidget {
   const ReceiptSettingsPage({super.key});
@@ -38,25 +41,59 @@ class _ReceiptSettingsPageState extends State<ReceiptSettingsPage> {
   @override
   void dispose() {
     for (final c in [
-      _storeName, _address, _phone, _header, _footer, _taxPercent
+      _storeName,
+      _address,
+      _phone,
+      _header,
+      _footer,
+      _taxPercent
     ]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _pickLogo(ImageSource source) async {
-    final picked = await ImagePicker().pickImage(
-      source: source,
-      maxWidth: 300,
-      imageQuality: 80,
-    );
-    if (picked != null) {
-      final dir = await getApplicationDocumentsDirectory();
-      final ext = picked.path.split('.').last;
-      final targetPath = '${dir.path}/receipt_logo.$ext';
-      await File(picked.path).copy(targetPath);
-      if (mounted) setState(() => _logoPath = targetPath);
+  bool _isPickingLogo = false;
+  final _imagePicker = ImagePicker();
+
+  Future<void> _pickLogo(bool fromCamera) async {
+    if (_isPickingLogo) return;
+    _isPickingLogo = true;
+
+    try {
+      if (fromCamera) {
+        final picked = await _imagePicker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 300,
+          imageQuality: 80,
+        );
+        if (picked != null) {
+          final dir = await getApplicationDocumentsDirectory();
+          final ext = picked.path.split('.').last;
+          final targetPath = '${dir.path}/receipt_logo.$ext';
+          await File(picked.path).copy(targetPath);
+          if (mounted) setState(() => _logoPath = targetPath);
+        }
+      } else {
+        final status = await Permission.storage.request();
+        if (!status.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Izin galeri ditolak')),
+            );
+          }
+          _isPickingLogo = false;
+          return;
+        }
+        if (mounted) {
+          final path = await CustomImagePicker.pickImage(context);
+          if (path != null && mounted) {
+            setState(() => _logoPath = path);
+          }
+        }
+      }
+    } finally {
+      _isPickingLogo = false;
     }
   }
 
@@ -72,7 +109,7 @@ class _ReceiptSettingsPageState extends State<ReceiptSettingsPage> {
               title: const Text('Ambil Foto'),
               onTap: () {
                 Navigator.pop(context);
-                _pickLogo(ImageSource.camera);
+                _pickLogo(true);
               },
             ),
             ListTile(
@@ -80,7 +117,7 @@ class _ReceiptSettingsPageState extends State<ReceiptSettingsPage> {
               title: const Text('Pilih dari Galeri'),
               onTap: () {
                 Navigator.pop(context);
-                _pickLogo(ImageSource.gallery);
+                _pickLogo(false);
               },
             ),
             if (_logoPath != null)
@@ -100,7 +137,8 @@ class _ReceiptSettingsPageState extends State<ReceiptSettingsPage> {
   }
 
   void _showPreview() {
-    final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
     final dateFmt = DateFormat('dd/MM/yyyy HH:mm');
     const hr = Divider(thickness: 1, color: Colors.black);
 
@@ -185,8 +223,13 @@ class _ReceiptSettingsPageState extends State<ReceiptSettingsPage> {
                     _row('Subtotal', fmt.format(45000)),
                     _row('Diskon', '- ${fmt.format(5000)}',
                         color: Colors.green),
-                    _PajakRow(40000, double.tryParse(_taxPercent.text) ?? 0, fmt),
-                    _row('TOTAL', fmt.format(_totalWithTax(45000, 5000, double.tryParse(_taxPercent.text) ?? 0)), bold: true),
+                    _PajakRow(
+                        40000, double.tryParse(_taxPercent.text) ?? 0, fmt),
+                    _row(
+                        'TOTAL',
+                        fmt.format(_totalWithTax(45000, 5000,
+                            double.tryParse(_taxPercent.text) ?? 0)),
+                        bold: true),
                     hr,
                     _row('Tunai', fmt.format(50000)),
                     _row('Kembalian', fmt.format(10000),
@@ -240,8 +283,7 @@ class _ReceiptSettingsPageState extends State<ReceiptSettingsPage> {
     return _row('Pajak $taxPct%', fmt.format(tax));
   }
 
-  Widget _row(String l, String v,
-      {bool bold = false, Color? color}) {
+  Widget _row(String l, String v, {bool bold = false, Color? color}) {
     final s = TextStyle(
       fontWeight: bold ? FontWeight.bold : FontWeight.normal,
       color: color,
@@ -279,8 +321,12 @@ class _ReceiptSettingsPageState extends State<ReceiptSettingsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Pengaturan Struk')),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(
-            16, 16, 16, 16 + MediaQuery.of(context).padding.bottom),
+        padding: ResponsivePageInsets.content(
+          context,
+          maxContentWidth: 760,
+          top: 16,
+          bottom: 16 + MediaQuery.of(context).padding.bottom,
+        ),
         children: [
           GestureDetector(
             onTap: _showLogoOptions,

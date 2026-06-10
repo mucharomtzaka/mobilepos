@@ -119,6 +119,14 @@ class BluetoothPrinter {
     final bytes = <int>[];
     final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
     final dateFmt = DateFormat('dd/MM/yyyy HH:mm');
+    int _gcd(int a, int b) {
+      while (b != 0) {
+        final t = b;
+        b = a % b;
+        a = t;
+      }
+      return a;
+    }
 
     bytes.addAll(generator.setGlobalCodeTable('CP1252'));
 
@@ -168,20 +176,50 @@ class BluetoothPrinter {
     }
     bytes.addAll(generator.hr());
 
-    for (final item in items) {
-      bytes.addAll(generator.text(item.productName,
-          styles: const PosStyles(bold: true)));
-      if (item.variantName != null) {
-        bytes.addAll(generator.text('  ${item.variantName}',
-            styles: const PosStyles(align: PosAlign.left)));
+    int i = 0;
+    while (i < items.length) {
+      if (items[i].bundleName != null) {
+        final bundleName = items[i].bundleName!;
+        final group = <OrderItem>[];
+        while (i < items.length && items[i].bundleName == bundleName) {
+          group.add(items[i]);
+          i++;
+        }
+        final total = group.fold<double>(0, (s, it) => s + it.subtotal);
+        final instances = group.map((it) => it.qty).reduce(_gcd);
+        bytes.addAll(generator.text('[BUNDLING] $bundleName',
+            styles: const PosStyles(bold: true, align: PosAlign.center)));
+        for (final it in group) {
+          bytes.addAll(generator.text('  ${it.qty ~/ instances}x ${it.productName}',
+              styles: const PosStyles(align: PosAlign.left)));
+        }
+        bytes.addAll(generator.row([
+          PosColumn(
+              text: '${instances}x ${fmt.format(total / instances)}',
+              width: 8,
+              styles: const PosStyles(align: PosAlign.left)),
+          PosColumn(
+              text: fmt.format(total),
+              width: 4,
+              styles: const PosStyles(align: PosAlign.right, bold: true)),
+        ]));
+      } else {
+        final item = items[i];
+        i++;
+        bytes.addAll(generator.text(item.productName,
+            styles: const PosStyles(bold: true)));
+        if (item.variantName != null) {
+          bytes.addAll(generator.text('  ${item.variantName}',
+              styles: const PosStyles(align: PosAlign.left)));
+        }
+        bytes.addAll(generator.row([
+          PosColumn(text: '${item.qty} x ${fmt.format(item.price)}', width: 8),
+          PosColumn(
+              text: fmt.format(item.subtotal),
+              width: 4,
+              styles: const PosStyles(align: PosAlign.right)),
+        ]));
       }
-      bytes.addAll(generator.row([
-        PosColumn(text: '${item.qty} x ${fmt.format(item.price)}', width: 8),
-        PosColumn(
-            text: fmt.format(item.subtotal),
-            width: 4,
-            styles: const PosStyles(align: PosAlign.right)),
-      ]));
     }
 
     bytes.addAll(generator.hr());

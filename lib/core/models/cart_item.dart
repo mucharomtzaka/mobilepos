@@ -6,22 +6,45 @@ class CartItem extends Equatable {
   final Product product;
   final ProductVariant? variant;
   final int qty;
+  final int? bundleId;
+  final String? bundleName;
+  final double? bundleAdjustedPrice;
 
-  const CartItem({required this.product, this.variant, this.qty = 1});
+  const CartItem({
+    required this.product,
+    this.variant,
+    this.qty = 1,
+    this.bundleId,
+    this.bundleName,
+    this.bundleAdjustedPrice,
+  });
 
-  String get displayName => variant != null ? '${product.name} - ${variant!.name}' : product.name;
+  String get displayName {
+    if (bundleName != null) return '$bundleName: ${product.name}';
+    return variant != null ? '${product.name} - ${variant!.name}' : product.name;
+  }
 
-  double get effectivePrice => product.price + (variant?.priceAdjustment ?? 0);
+  double get effectivePrice => bundleAdjustedPrice ?? (product.price + (variant?.priceAdjustment ?? 0));
 
   double get subtotal => effectivePrice * qty;
 
-  String get cartKey => variant != null ? '${product.id}_${variant!.id}' : '${product.id}';
+  String get cartKey {
+    if (bundleId != null) return 'bundle_${bundleId}_${product.id}_${variant?.id}';
+    return variant != null ? '${product.id}_${variant!.id}' : '${product.id}';
+  }
 
-  CartItem copyWith({int? qty, ProductVariant? variant}) =>
-      CartItem(product: product, variant: variant ?? this.variant, qty: qty ?? this.qty);
+  CartItem copyWith({int? qty, ProductVariant? variant, double? bundleAdjustedPrice}) =>
+      CartItem(
+        product: product,
+        variant: variant ?? this.variant,
+        qty: qty ?? this.qty,
+        bundleId: bundleId,
+        bundleName: bundleName,
+        bundleAdjustedPrice: bundleAdjustedPrice ?? this.bundleAdjustedPrice,
+      );
 
   @override
-  List<Object?> get props => [product.id, variant?.id, qty];
+  List<Object?> get props => [product.id, variant?.id, qty, bundleId, bundleName];
 }
 
 enum DiscountType { percent, nominal }

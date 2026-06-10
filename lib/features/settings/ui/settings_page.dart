@@ -8,6 +8,7 @@ import '../../cashier/ui/transaction_settings_page.dart';
 import '../../customer/ui/customer_page.dart';
 import '../../product/bloc/product_bloc.dart';
 import '../../product/bloc/stock_bloc.dart';
+import '../../product/ui/bundle_form_page.dart';
 import '../../product/ui/category_page.dart';
 import '../../product/ui/product_page.dart';
 import '../../product/ui/stock_page.dart';
@@ -20,6 +21,7 @@ import '../ui/profile_page.dart';
 import '../ui/table_management_page.dart';
 import '../../../core/database/product_dao.dart';
 import '../../../core/database/stock_dao.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 import '../../../core/utils/receipt_settings.dart';
 import '../../../core/utils/crash_reporter.dart';
 import '../../cart/bloc/cart_bloc.dart';
@@ -38,12 +40,15 @@ class SettingsPage extends StatelessWidget {
         title: const Text('Pengaturan'),
       ),
       body: ListView(
+        padding: ResponsivePageInsets.horizontal(context, maxContentWidth: 620),
         children: [
           const SizedBox(height: 8),
           _SettingsTile(
             icon: Icons.person,
             title: 'Profil',
-            subtitle: user != null ? '${user.name} • ${user.role == 'admin' ? 'Admin' : user.role == 'merchant' ? 'Merchant' : 'Kasir'}' : '',
+            subtitle: user != null
+                ? '${user.name} • ${user.role == 'admin' ? 'Admin' : user.role == 'merchant' ? 'Merchant' : 'Kasir'}'
+                : '',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ProfilePage()),
@@ -56,8 +61,7 @@ class SettingsPage extends StatelessWidget {
             subtitle: 'Pengaturan printer Bluetooth',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                  builder: (_) => const PrinterSettingsPage()),
+              MaterialPageRoute(builder: (_) => const PrinterSettingsPage()),
             ),
           ),
           _SettingsTile(
@@ -68,8 +72,7 @@ class SettingsPage extends StatelessWidget {
               final cartBloc = context.read<CartBloc>();
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                    builder: (_) => const ReceiptSettingsPage()),
+                MaterialPageRoute(builder: (_) => const ReceiptSettingsPage()),
               ).then((_) {
                 cartBloc.add(CartSetTaxPercent(ReceiptSettings.taxPercent));
               });
@@ -139,6 +142,15 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           _SettingsTile(
+            icon: Icons.redeem,
+            title: 'Kelola Bundling',
+            subtitle: 'Buat paket bundling produk dengan harga spesial',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BundlePage()),
+            ),
+          ),
+          _SettingsTile(
             icon: Icons.warehouse,
             title: 'Kelola Stok',
             subtitle: 'Kelola stok produk',
@@ -203,7 +215,8 @@ class SettingsPage extends StatelessWidget {
               applicationLegalese: '© 2026 DronePos',
               children: [
                 const SizedBox(height: 16),
-                const Text('Aplikasi kasir modern untuk bisnis retail. Mendukung pencatatan transaksi, laporan, manajemen produk, pelanggan, dan banyak lagi'),
+                const Text(
+                    'Aplikasi kasir modern untuk bisnis retail. Mendukung pencatatan transaksi, laporan, manajemen produk, pelanggan, dan banyak lagi'),
               ],
             ),
           ),
@@ -248,11 +261,13 @@ class _SettingsTile extends StatelessWidget {
       leading: CircleAvatar(
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         radius: 22,
-        child: Icon(icon, color: Theme.of(context).colorScheme.onPrimaryContainer),
+        child:
+            Icon(icon, color: Theme.of(context).colorScheme.onPrimaryContainer),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-      trailing: Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      trailing: Icon(Icons.chevron_right,
+          color: Theme.of(context).colorScheme.onSurfaceVariant),
       onTap: onTap,
     );
   }

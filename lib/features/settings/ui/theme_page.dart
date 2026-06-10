@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/database/settings_dao.dart';
 import '../../../core/bloc/theme_bloc.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 
 class ThemePage extends StatefulWidget {
   const ThemePage({super.key});
@@ -38,6 +39,7 @@ class _ThemePageState extends State<ThemePage> {
         title: const Text('Tema'),
       ),
       body: ListView(
+        padding: ResponsivePageInsets.horizontal(context, maxContentWidth: 720),
         children: [
           _buildTile(
             mode: ThemeMode.system,
@@ -70,10 +72,14 @@ class _ThemePageState extends State<ThemePage> {
   }) {
     final isSelected = _themeMode == mode;
     return ListTile(
-      leading: Icon(icon, color: isSelected ? Theme.of(context).primaryColor : null),
-      title: Text(title, style: TextStyle(fontWeight: isSelected ? FontWeight.bold : null)),
+      leading:
+          Icon(icon, color: isSelected ? Theme.of(context).primaryColor : null),
+      title: Text(title,
+          style: TextStyle(fontWeight: isSelected ? FontWeight.bold : null)),
       subtitle: Text(subtitle),
-      trailing: isSelected ? Icon(Icons.check, color: Theme.of(context).primaryColor) : null,
+      trailing: isSelected
+          ? Icon(Icons.check, color: Theme.of(context).primaryColor)
+          : null,
       onTap: () => _setTheme(mode),
     );
   }

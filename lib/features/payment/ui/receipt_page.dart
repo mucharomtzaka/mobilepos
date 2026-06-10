@@ -159,13 +159,41 @@ class _ReceiptPageState extends State<ReceiptPage> {
     if (widget.order.note != null && widget.order.note!.isNotEmpty) buffer.writeln('Catatan: ${widget.order.note}');
     buffer.writeln('--------------------------------');
 
-    for (final item in _items) {
-      final name = item.variantName != null
-          ? '${item.productName} - ${item.variantName}'
-          : item.productName;
-      buffer.writeln('${item.qty} x ${fmt.format(item.price)}');
-      buffer.writeln('$name');
-      buffer.writeln(fmt.format(item.subtotal));
+    int _gcd(int a, int b) {
+      while (b != 0) {
+        final t = b;
+        b = a % b;
+        a = t;
+      }
+      return a;
+    }
+    int i = 0;
+    while (i < _items.length) {
+      if (_items[i].bundleName != null) {
+        final bundleName = _items[i].bundleName!;
+        final group = <OrderItem>[];
+        while (i < _items.length && _items[i].bundleName == bundleName) {
+          group.add(_items[i]);
+          i++;
+        }
+        final total = group.fold<double>(0, (s, it) => s + it.subtotal);
+        final instances = group.map((it) => it.qty).reduce(_gcd);
+        buffer.writeln('[BUNDLING] $bundleName');
+        for (final it in group) {
+          buffer.writeln('  ${it.qty ~/ instances}x ${it.productName}');
+        }
+        buffer.writeln('  ${instances}x ${fmt.format(total / instances)}');
+        buffer.writeln('  ${fmt.format(total)}');
+      } else {
+        final it = _items[i];
+        i++;
+        final name = it.variantName != null
+            ? '${it.productName} - ${it.variantName}'
+            : it.productName;
+        buffer.writeln('${it.qty} x ${fmt.format(it.price)}');
+        buffer.writeln('$name');
+        buffer.writeln(fmt.format(it.subtotal));
+      }
     }
 
     buffer.writeln('--------------------------------');
@@ -403,22 +431,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
                               if (widget.order.note != null && widget.order.note!.isNotEmpty)
                                 Text('Catatan: ${widget.order.note}'),
                               const Divider(),
-                              ..._items.map((item) => Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 2),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                            child: Text(
-                                                item.variantName != null
-                                                    ? '${item.productName} - ${item.variantName}\n${item.qty} x ${fmt.format(item.price)}'
-                                                    : '${item.productName}\n${item.qty} x ${fmt.format(item.price)}',
-                                                style: const TextStyle(fontSize: 13))),
-                                        Text(fmt.format(item.subtotal)),
-                                      ],
-                                    ),
-                                  )),
+                              ..._buildReceiptItems(),
                               const Divider(),
                               if (widget.order.discountAmount > 0 ||
                                   widget.order.taxPercent > 0) ...[
@@ -538,6 +551,84 @@ class _ReceiptPageState extends State<ReceiptPage> {
         },
       ),
     );
+  }
+
+  List<Widget> _buildReceiptItems() {
+    final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    final items = <Widget>[];
+    int i = 0;
+    int _gcd(int a, int b) {
+      while (b != 0) {
+        final t = b;
+        b = a % b;
+        a = t;
+      }
+      return a;
+    }
+    while (i < _items.length) {
+      if (_items[i].bundleName != null) {
+        final bundleName = _items[i].bundleName!;
+        final group = <OrderItem>[];
+        while (i < _items.length && _items[i].bundleName == bundleName) {
+          group.add(_items[i]);
+          i++;
+        }
+        final total = group.fold<double>(0, (s, it) => s + it.subtotal);
+        final instances = group.map((it) => it.qty).reduce(_gcd);
+        items.add(Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 2),
+          child: Row(
+            children: [
+              Icon(Icons.redeem, size: 14, color: Colors.orange),
+              const SizedBox(width: 4),
+              Text(bundleName,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.orange)),
+            ],
+          ),
+        ));
+        for (final it in group) {
+          items.add(Padding(
+            padding: const EdgeInsets.only(left: 22, bottom: 1),
+            child: Text('${it.qty ~/ instances}x ${it.productName}',
+                style: const TextStyle(fontSize: 12)),
+          ));
+        }
+        items.add(Padding(
+          padding: const EdgeInsets.only(left: 22, top: 2),
+          child: Row(
+            children: [
+              Text('${instances}x ${fmt.format(total / instances)}',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Text(fmt.format(total),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            ],
+          ),
+        ));
+      } else {
+        final it = _items[i];
+        i++;
+        items.add(Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                  child: Text(
+                      it.variantName != null
+                          ? '${it.productName} - ${it.variantName}\n${it.qty} x ${fmt.format(it.price)}'
+                          : '${it.productName}\n${it.qty} x ${fmt.format(it.price)}',
+                      style: const TextStyle(fontSize: 13))),
+              Text(fmt.format(it.subtotal)),
+            ],
+          ),
+        ));
+      }
+    }
+    return items;
   }
 
   Widget _receiptRow(String l, String v,

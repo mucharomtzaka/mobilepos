@@ -5,6 +5,7 @@ import '../bloc/shift_bloc.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../../core/models/user.dart';
 import '../../../core/utils/responsive_dialog.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 
 class ShiftPage extends StatelessWidget {
   const ShiftPage({super.key});
@@ -47,7 +48,12 @@ class _OpenShiftView extends StatelessWidget {
 
     final bottomPad = MediaQuery.of(context).padding.bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomPad),
+      padding: ResponsivePageInsets.content(
+        context,
+        maxContentWidth: 640,
+        top: 16,
+        bottom: 16 + bottomPad,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -176,7 +182,12 @@ class _OpenShiftFormState extends State<_OpenShiftForm> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: ResponsivePageInsets.content(
+        context,
+        maxContentWidth: 640,
+        top: 16,
+        bottom: 16,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [

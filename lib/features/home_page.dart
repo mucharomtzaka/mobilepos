@@ -14,11 +14,17 @@ import 'settings/ui/settings_page.dart';
 import 'settings/ui/profile_page.dart';
 import '../core/database/product_dao.dart';
 import '../core/database/customer_dao.dart';
+import '../core/database/bundle_dao.dart';
 import '../core/models/cart_item.dart';
+import '../core/models/bundle.dart';
 import '../core/models/customer.dart';
 import '../core/utils/receipt_settings.dart';
 import '../core/utils/responsive_dialog.dart';
 import '../core/database/settings_dao.dart';
+import '../core/database/order_dao.dart';
+import '../core/database/table_dao.dart';
+import '../core/models/table.dart';
+import '../core/models/order.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -29,6 +35,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _index = 0;
   final ProductBloc _productBloc = ProductBloc(ProductDao(), CategoryDao());
+  final GlobalKey<_PosViewState> _posKey = GlobalKey();
 
   @override
   void initState() {
@@ -55,7 +62,10 @@ class _HomePageState extends State<HomePage> {
       );
       return;
     }
-    if (i == 0) _productBloc.add(ProductLoad());
+    if (i == 0) {
+      _productBloc.add(ProductLoad());
+      _posKey.currentState?.reloadBundles();
+    }
     setState(() => _index = i);
   }
 
@@ -73,7 +83,7 @@ class _HomePageState extends State<HomePage> {
     final user = authState.user;
 
     final pages = [
-      _PosTab(productBloc: _productBloc),
+      _PosTab(productBloc: _productBloc, posKey: _posKey),
       const ReportPage(),
       const FinancePage(),
       const SettingsPage(),
@@ -141,8 +151,11 @@ class _HomePageState extends State<HomePage> {
                 context.read<AuthBloc>().add(AuthLogoutRequested());
               } else if (v == 'settings') {
                 Navigator.push(context,
-                    MaterialPageRoute(
-                        builder: (_) => const SettingsPage())).then((_) => _productBloc.add(ProductLoad()));
+                        MaterialPageRoute(builder: (_) => const SettingsPage()))
+                    .then((_) {
+                  _productBloc.add(ProductLoad());
+                  _posKey.currentState?.reloadBundles();
+                });
               }
             },
           ),
@@ -201,19 +214,20 @@ class _HomePageState extends State<HomePage> {
 // POS Tab
 class _PosTab extends StatelessWidget {
   final ProductBloc productBloc;
-  const _PosTab({required this.productBloc});
+  final GlobalKey<_PosViewState>? posKey;
+  const _PosTab({super.key, required this.productBloc, this.posKey});
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider.value(
       value: productBloc,
-      child: const _PosView(),
+      child: _PosView(key: posKey),
     );
   }
 }
 
 class _PosView extends StatefulWidget {
-  const _PosView();
+  const _PosView({super.key});
   @override
   State<_PosView> createState() => _PosViewState();
 }
@@ -222,11 +236,38 @@ class _PosViewState extends State<_PosView> {
   final _searchCtrl = TextEditingController();
   final _scrollController = ScrollController();
   int? _categoryId;
+  List<Bundle> _bundles = [];
+  int _draftCountKey = 0;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadBundles();
+  }
+
+  void reloadBundles() {
+    _loadBundles();
+  }
+
+  void _refreshDraftCount() {
+    setState(() {
+      _draftCountKey = DateTime.now().millisecondsSinceEpoch;
+    });
+  }
+
+  Future<void> _loadBundles() async {
+    try {
+      final dao = BundleDao();
+      final bundles = await dao.getAll();
+      if (mounted)
+        setState(() {
+          _bundles = bundles;
+        });
+      debugPrint('_loadBundles: ${bundles.length} bundles loaded');
+    } catch (e, s) {
+      debugPrint('_loadBundles error: $e\n$s');
+    }
   }
 
   @override
@@ -245,9 +286,9 @@ class _PosViewState extends State<_PosView> {
       final state = context.read<ProductBloc>().state;
       if (state is ProductLoaded && state.hasMore) {
         context.read<ProductBloc>().add(ProductLoadMore(
-          categoryId: _categoryId,
-          search: _searchCtrl.text,
-        ));
+              categoryId: _categoryId,
+              search: _searchCtrl.text,
+            ));
       }
     }
   }
@@ -305,7 +346,8 @@ class _PosViewState extends State<_PosView> {
                         height: 44,
                         child: ListView(
                           scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           children: [
                             _CategoryChip(
                               label: 'Semua',
@@ -316,46 +358,64 @@ class _PosViewState extends State<_PosView> {
                               },
                             ),
                             ...state.categories.map((c) => _CategoryChip(
-                              label: c.name,
-                              isSelected: _categoryId == c.id,
-                              onTap: () {
-                                setState(() => _categoryId = c.id);
-                                ctx.read<ProductBloc>().add(ProductLoad(categoryId: c.id));
-                              },
-                            )),
+                                  label: c.name,
+                                  isSelected: _categoryId == c.id,
+                                  onTap: () {
+                                    setState(() => _categoryId = c.id);
+                                    ctx
+                                        .read<ProductBloc>()
+                                        .add(ProductLoad(categoryId: c.id));
+                                  },
+                                )),
                           ],
                         ),
                       ),
                     Expanded(
-                      child: state.products.isEmpty
-                          ? const Center(child: Text('Tidak ada produk'))
+                      child: state.products.isEmpty && _bundles.isEmpty
+                          ? _EmptyProduct()
                           : LayoutBuilder(
                               builder: (ctx, constraints) {
                                 final width = constraints.maxWidth;
                                 final crossAxisCount = compact
                                     ? (width > 800 ? 6 : 5)
-                                    : (width > 800 ? 5 : width > 600 ? 4 : 3);
+                                    : (width > 800
+                                        ? 5
+                                        : width > 600
+                                            ? 4
+                                            : 3);
+                                final totalItems = state.products.length +
+                                    _bundles.length +
+                                    (state.hasMore ? 1 : 0);
                                 return GridView.builder(
                                   controller: _scrollController,
                                   padding: EdgeInsets.all(compact ? 4 : 8),
-                                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
                                     crossAxisCount: crossAxisCount,
                                     childAspectRatio: compact ? 0.65 : 0.75,
                                     crossAxisSpacing: compact ? 4 : 8,
                                     mainAxisSpacing: compact ? 4 : 8,
                                   ),
-                                  itemCount: state.products.length + (state.hasMore ? 1 : 0),
+                                  itemCount: totalItems,
                                   itemBuilder: (_, i) {
-                                    if (i >= state.products.length) {
-                                      return const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(16),
-                                          child: CircularProgressIndicator(),
-                                        ),
+                                    if (i < state.products.length) {
+                                      final p = state.products[i];
+                                      return _ProductCard(
+                                          product: p, compact: compact);
+                                    }
+                                    final bundleIdx = i - state.products.length;
+                                    if (bundleIdx < _bundles.length) {
+                                      return _BundleCard(
+                                        bundle: _bundles[bundleIdx],
+                                        compact: compact,
                                       );
                                     }
-                                    final p = state.products[i];
-                                    return _ProductCard(product: p, compact: compact);
+                                    return const Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
                                   },
                                 );
                               },
@@ -373,21 +433,68 @@ class _PosViewState extends State<_PosView> {
   }
 
   Widget _buildTabletLayout() {
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: _buildProductArea(compact: true),
-        ),
-        Container(
-          width: 1,
-          color: Colors.grey[300],
-        ),
-        Expanded(
-          flex: 2,
-          child: _buildCartSidebar(),
-        ),
-      ],
+    return BlocBuilder<CartBloc, CartState>(
+      builder: (ctx, cart) {
+        return Row(
+          children: [
+            // Column 1: Products
+            Expanded(
+              flex: 3,
+              child: _buildProductArea(compact: true),
+            ),
+            Container(width: 1, color: Colors.grey[300]),
+            // Column 2: Customer, Table, Note
+            Expanded(
+              flex: 2,
+              child: _buildSelectionPanel(ctx, cart),
+            ),
+            Container(width: 1, color: Colors.grey[300]),
+            // Column 3: Cart
+            Expanded(
+              flex: 3,
+              child: _buildCartSidebar(ctx, cart),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSelectionPanel(BuildContext ctx, CartState cart) {
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // Customer section
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.grey[100],
+            width: double.infinity,
+            child: const Text('Pelanggan',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ),
+          _buildCustomerBar(ctx, cart),
+          const Divider(height: 1),
+          // Table section
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.grey[100],
+            width: double.infinity,
+            child: const Text('Meja / Pickup',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ),
+          _buildTableBar(ctx, cart),
+          const Divider(height: 1),
+          // Note section
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.grey[100],
+            width: double.infinity,
+            child: const Text('Catatan',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ),
+          _buildNoteBar(ctx, cart),
+        ],
+      ),
     );
   }
 
@@ -456,7 +563,8 @@ class _PosViewState extends State<_PosView> {
                         height: 44,
                         child: ListView(
                           scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           children: [
                             _CategoryChip(
                               label: 'Semua',
@@ -467,44 +575,60 @@ class _PosViewState extends State<_PosView> {
                               },
                             ),
                             ...state.categories.map((c) => _CategoryChip(
-                              label: c.name,
-                              isSelected: _categoryId == c.id,
-                              onTap: () {
-                                setState(() => _categoryId = c.id);
-                                ctx.read<ProductBloc>().add(ProductLoad(categoryId: c.id));
-                              },
-                            )),
+                                  label: c.name,
+                                  isSelected: _categoryId == c.id,
+                                  onTap: () {
+                                    setState(() => _categoryId = c.id);
+                                    ctx
+                                        .read<ProductBloc>()
+                                        .add(ProductLoad(categoryId: c.id));
+                                  },
+                                )),
                           ],
                         ),
                       ),
                     Expanded(
-                      child: state.products.isEmpty
-                          ? const Center(child: Text('Tidak ada produk'))
+                      child: state.products.isEmpty && _bundles.isEmpty
+                          ? const _EmptyProduct()
                           : LayoutBuilder(
                               builder: (ctx, constraints) {
                                 final width = constraints.maxWidth;
-                                final crossAxisCount = width > 800 ? 5 : width > 600 ? 4 : 3;
+                                final crossAxisCount = width > 800
+                                    ? 5
+                                    : width > 600
+                                        ? 4
+                                        : 3;
+                                final totalItems = state.products.length +
+                                    _bundles.length +
+                                    (state.hasMore ? 1 : 0);
                                 return GridView.builder(
                                   controller: _scrollController,
                                   padding: const EdgeInsets.all(8),
-                                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
                                     crossAxisCount: crossAxisCount,
                                     childAspectRatio: 0.75,
                                     crossAxisSpacing: 8,
                                     mainAxisSpacing: 8,
                                   ),
-                                  itemCount: state.products.length + (state.hasMore ? 1 : 0),
+                                  itemCount: totalItems,
                                   itemBuilder: (_, i) {
-                                    if (i >= state.products.length) {
-                                      return const Center(
-                                        child: Padding(
-                                          padding: EdgeInsets.all(16),
-                                          child: CircularProgressIndicator(),
-                                        ),
+                                    if (i < state.products.length) {
+                                      final p = state.products[i];
+                                      return _ProductCard(product: p);
+                                    }
+                                    final bundleIdx = i - state.products.length;
+                                    if (bundleIdx < _bundles.length) {
+                                      return _BundleCard(
+                                        bundle: _bundles[bundleIdx],
                                       );
                                     }
-                                    final p = state.products[i];
-                                    return _ProductCard(product: p);
+                                    return const Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
                                   },
                                 );
                               },
@@ -521,7 +645,8 @@ class _PosViewState extends State<_PosView> {
         BlocBuilder<CartBloc, CartState>(
           builder: (ctx, cart) {
             if (cart.items.isEmpty) return const SizedBox();
-            final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+            final fmt = NumberFormat.currency(
+                locale: 'id', symbol: 'Rp ', decimalDigits: 0);
             return Container(
               color: Theme.of(ctx).primaryColor,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -532,12 +657,11 @@ class _PosViewState extends State<_PosView> {
                   const Spacer(),
                   Text(fmt.format(cart.total),
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold)),
+                          color: Colors.white, fontWeight: FontWeight.bold)),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white),
+                    style:
+                        ElevatedButton.styleFrom(backgroundColor: Colors.white),
                     onPressed: () => Navigator.push(
                       ctx,
                       MaterialPageRoute(
@@ -579,8 +703,9 @@ class _PosViewState extends State<_PosView> {
                 style: TextStyle(
                   fontSize: 12,
                   color: cart.customer != null ? null : Colors.grey,
-                  fontWeight:
-                      cart.customer != null ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: cart.customer != null
+                      ? FontWeight.bold
+                      : FontWeight.normal,
                 ),
               ),
             ),
@@ -607,197 +732,366 @@ class _PosViewState extends State<_PosView> {
     );
   }
 
-  Widget _buildCartSidebar() {
-    final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
-    return BlocBuilder<CartBloc, CartState>(
-      builder: (ctx, cart) {
-        return Column(
+  void _showTablePicker(BuildContext ctx) async {
+    final tables = await TableDao().getActive();
+    if (!ctx.mounted) return;
+    showConstrainedModalBottomSheet(
+      context: ctx,
+      builder: (_) => _TablePickerSheet(
+        tables: tables,
+        onSelected: (table) {
+          ctx.read<CartBloc>().add(CartSetTable(table));
+          Navigator.pop(ctx);
+        },
+      ),
+    );
+  }
+
+  void _showNoteDialog(BuildContext ctx) {
+    final ctrl = TextEditingController(text: ctx.read<CartBloc>().state.note);
+    showConstrainedDialog(
+      context: ctx,
+      builder: (dCtx) => AlertDialog(
+        title: const Text('Catatan'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            hintText: 'Contoh: Tanpa es, pedas, dll',
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              ctx
+                  .read<CartBloc>()
+                  .add(CartSetNote(ctrl.text.isEmpty ? null : ctrl.text));
+              Navigator.pop(dCtx);
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _pickupDraft(BuildContext ctx) async {
+    final dao = OrderDao();
+    final drafts = await dao.getDraftOrders();
+    if (!ctx.mounted) return;
+    if (drafts.isEmpty) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('Tidak ada draft')),
+      );
+      return;
+    }
+    showConstrainedModalBottomSheet(
+      context: ctx,
+      builder: (_) => _DraftPickerSheet(
+        dao: dao,
+        drafts: drafts,
+        onPicked: (order, items) {
+          ctx.read<CartBloc>().add(CartLoadDraft(order: order, items: items));
+          Navigator.pop(ctx);
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(content: Text('Draft ${order.orderNumber} dimuat')),
+          );
+        },
+        onDeleted: () {
+          _refreshDraftCount();
+        },
+        onDraftDeleted: _refreshDraftCount,
+      ),
+    );
+  }
+
+  void _saveDraft(BuildContext ctx) {
+    final authState = ctx.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+    final userId = authState.user.id!;
+    int? shiftId;
+    final shiftState = ctx.read<ShiftBloc>().state;
+    if (shiftState is ShiftOpen) {
+      shiftId = shiftState.shift.id;
+    }
+    ctx.read<CartBloc>().add(CartSaveDraft(userId: userId, shiftId: shiftId));
+    ScaffoldMessenger.of(ctx).showSnackBar(
+      const SnackBar(content: Text('Draft tersimpan')),
+    );
+    _refreshDraftCount();
+  }
+
+  Widget _buildTableBar(BuildContext ctx, CartState state) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.table_restaurant, size: 18),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  state.table?.name ?? 'Meja (opsional)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: state.table != null
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: state.table != null ? null : Colors.grey,
+                  ),
+                ),
+              ),
+              if (state.table != null)
+                GestureDetector(
+                  onTap: () => ctx.read<CartBloc>().add(CartSetTable(null)),
+                  child: const Icon(Icons.close, size: 16),
+                )
+              else
+                TextButton(
+                  onPressed: () => _showTablePicker(ctx),
+                  child: const Text('Pilih', style: TextStyle(fontSize: 12)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoteBar(BuildContext ctx, CartState state) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Theme.of(ctx).primaryColor,
-              child: Row(
-                children: [
-                  const Icon(Icons.shopping_cart, color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Keranjang',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const Spacer(),
-                  if (cart.items.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.delete_sweep, color: Colors.white),
-                      tooltip: 'Kosongkan',
-                      onPressed: () {
-                        context.read<CartBloc>().add(CartClear());
-                      },
-                    ),
-                  Text(
-                    '${cart.itemCount} item',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ],
+            const Icon(Icons.note, size: 18),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                state.note ?? 'Catatan (opsional)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight:
+                      state.note != null ? FontWeight.bold : FontWeight.normal,
+                  color: state.note != null ? null : Colors.grey,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            // Customer
-            _buildCustomerBar(ctx, cart),
-            // Cart items list
-            Expanded(
-              child: cart.items.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(Icons.shopping_cart_outlined, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                          ),
-                          const SizedBox(height: 8),
-                          Text('Keranjang kosong', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: cart.items.length,
-                      itemBuilder: (_, i) {
-                        final item = cart.items[i];
-                        return Card(
-                          child: ListTile(
-                            dense: true,
-                            leading: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: Center(
-                                child: Text(
-                                  '${item.qty}x',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: Theme.of(ctx).primaryColor,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            title: Text(
-                              item.product.name,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                            subtitle: item.variant != null
-                                ? Text(
-                                    item.variant!.name,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey[600],
-                                    ),
-                                  )
-                                : null,
-                            trailing: SizedBox(
-                              width: 90,
-                              child: Text(
-                                fmt.format(item.subtotal),
-                                textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            onTap: () => _showCartItemOptions(ctx, item),
-                          ),
-                        );
-                      },
-                    ),
+            TextButton(
+              onPressed: () => _showNoteDialog(ctx),
+              child: Text(
+                state.note != null ? 'Edit' : 'Tambah',
+                style: const TextStyle(fontSize: 12),
+              ),
             ),
-            // Summary
-            if (cart.items.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(12),
-                child: Column(
+            if (state.note != null)
+              GestureDetector(
+                onTap: () => ctx.read<CartBloc>().add(CartSetNote(null)),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(Icons.close, size: 16),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCartSidebar(BuildContext ctx, CartState cart) {
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: Theme.of(ctx).primaryColor,
+          child: Row(
+            children: [
+              const Icon(Icons.shopping_cart, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(
+                'Keranjang',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const Spacer(),
+              FutureBuilder<int>(
+                key: ValueKey(_draftCountKey),
+                future: OrderDao().getDraftOrders().then((l) => l.length),
+                builder: (_, snap) {
+                  final count = snap.data ?? 0;
+                  return Badge(
+                    isLabelVisible: count > 0,
+                    label: Text('$count'),
+                    child: IconButton(
+                      icon: const Icon(Icons.inbox, color: Colors.white),
+                      tooltip: 'Ambil Draft',
+                      onPressed: () => _pickupDraft(ctx),
+                    ),
+                  );
+                },
+              ),
+              if (cart.items.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep, color: Colors.white),
+                  tooltip: 'Kosongkan',
+                  onPressed: () {
+                    context.read<CartBloc>().add(CartClear());
+                  },
+                ),
+              Text(
+                '${cart.itemCount} item',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+        // Cart items list
+        Expanded(
+          child: cart.items.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(Icons.shopping_cart_outlined,
+                            size: 48,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Keranjang kosong',
+                          style: TextStyle(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant)),
+                    ],
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(8),
+                  children: _buildCartItemList(ctx, cart.items),
+                ),
+        ),
+        // Summary
+        if (cart.items.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Discount input
+                Row(
                   children: [
-                    // Discount input
-                    Row(
-                      children: [
-                        const Text('Diskon',
-                            style: TextStyle(fontSize: 13)),
-                        const Spacer(),
-                        SizedBox(
-                          width: 100,
-                          height: 32,
-                          child: TextField(
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              hintText: '0',
-                              border: OutlineInputBorder(),
-                              contentPadding:
-                                  EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            ),
-                            onChanged: (v) {
-                              final disc = int.tryParse(v) ?? 0;
-                              ctx.read<CartBloc>().add(CartApplyDiscount(
-                                disc > 0 ? Discount(type: DiscountType.nominal, value: disc.toDouble()) : null,
-                              ));
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    // Total
-                    Row(
-                      children: [
-                        const Text('Total',
-                            style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold)),
-                        const Spacer(),
-                        Text(fmt.format(cart.total),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(ctx).primaryColor,
-                            )),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
+                    const Text('Diskon', style: TextStyle(fontSize: 13)),
+                    const Spacer(),
                     SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(ctx).primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                      width: 100,
+                      height: 32,
+                      child: TextField(
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: '0',
+                          border: OutlineInputBorder(),
+                          contentPadding:
+                              EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         ),
-                        onPressed: () => Navigator.push(
-                          ctx,
-                          MaterialPageRoute(
-                            builder: (_) => BlocProvider.value(
-                              value: ctx.read<CartBloc>(),
-                              child: const PaymentPage(),
-                            ),
-                          ),
-                        ),
-                        child: const Text('Bayar',
-                            style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        onChanged: (v) {
+                          final disc = int.tryParse(v) ?? 0;
+                          ctx.read<CartBloc>().add(CartApplyDiscount(
+                                disc > 0
+                                    ? Discount(
+                                        type: DiscountType.nominal,
+                                        value: disc.toDouble())
+                                    : null,
+                              ));
+                        },
                       ),
                     ),
                   ],
                 ),
-              ),
-          ],
-        );
-      },
+                const Divider(),
+                // Simpan Draft
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        cart.items.isEmpty ? null : () => _saveDraft(ctx),
+                    icon: const Icon(Icons.save, size: 18),
+                    label: const Text('Simpan Draft'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Total
+                Row(
+                  children: [
+                    const Text('Total',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    Text(fmt.format(cart.total),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(ctx).primaryColor,
+                        )),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(ctx).primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed: () => Navigator.push(
+                      ctx,
+                      MaterialPageRoute(
+                        builder: (_) => BlocProvider.value(
+                          value: ctx.read<CartBloc>(),
+                          child: const PaymentPage(),
+                        ),
+                      ),
+                    ),
+                    child: const Text('Bayar',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -809,20 +1103,33 @@ class _PosViewState extends State<_PosView> {
         children: [
           ListTile(
             leading: const Icon(Icons.remove_circle_outline, color: Colors.red),
-            title: const Text('Hapus'),
+            title: Text(item.bundleName != null
+                ? 'Hapus Semua dari Bundling'
+                : 'Hapus'),
             onTap: () {
-              context.read<CartBloc>().add(CartRemoveItem(item.cartKey));
+              if (item.bundleId != null) {
+                // Remove all bundle items
+                final cartState = context.read<CartBloc>().state;
+                for (final ci in cartState.items) {
+                  if (ci.bundleId == item.bundleId) {
+                    context.read<CartBloc>().add(CartRemoveItem(ci.cartKey));
+                  }
+                }
+              } else {
+                context.read<CartBloc>().add(CartRemoveItem(item.cartKey));
+              }
               Navigator.pop(ctx);
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.edit),
-            title: const Text('Ubah Qty'),
-            onTap: () {
-              Navigator.pop(ctx);
-              _showQtyDialog(context, item);
-            },
-          ),
+          if (item.bundleId == null)
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Ubah Qty'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showQtyDialog(context, item);
+              },
+            ),
         ],
       ),
     );
@@ -852,9 +1159,9 @@ class _PosViewState extends State<_PosView> {
               final qty = int.tryParse(controller.text);
               if (qty != null && qty > 0) {
                 context.read<CartBloc>().add(CartUpdateQty(
-                  item.cartKey,
-                  qty,
-                ));
+                      item.cartKey,
+                      qty,
+                    ));
               }
               Navigator.pop(ctx);
             },
@@ -864,10 +1171,141 @@ class _PosViewState extends State<_PosView> {
       ),
     );
   }
+
+  List<Widget> _buildCartItemList(BuildContext ctx, List<CartItem> items) {
+    final list = <Widget>[];
+    int i = 0;
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    while (i < items.length) {
+      if (items[i].bundleId != null) {
+        final bundleId = items[i].bundleId;
+        final bundleName = items[i].bundleName!;
+        final group = <CartItem>[];
+        while (i < items.length && items[i].bundleId == bundleId) {
+          group.add(items[i]);
+          i++;
+        }
+        final total = group.fold<double>(0, (s, ci) => s + ci.subtotal);
+        final instances = group.map((ci) => ci.qty).reduce(_gcd);
+        final bundlePrice = total / instances;
+        list.add(Card(
+          margin: const EdgeInsets.only(bottom: 4),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.redeem, size: 16, color: Colors.orange),
+                const SizedBox(width: 6),
+                Expanded(
+                    child: Text(bundleName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.orange))),
+              ]),
+              const SizedBox(height: 4),
+              ...group.map((ci) => Padding(
+                    padding: const EdgeInsets.only(left: 22),
+                    child: Text('${ci.qty ~/ instances}x ${ci.product.name}',
+                        style: const TextStyle(fontSize: 12)),
+                  )),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.only(left: 22),
+                child: Text('${instances}x ${fmt.format(bundlePrice)}',
+                    style: const TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w600)),
+              ),
+              const Divider(height: 8),
+              Row(children: [
+                const Spacer(),
+                Text(fmt.format(total),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13)),
+              ]),
+            ]),
+          ),
+        ));
+      } else {
+        final item = items[i];
+        i++;
+        list.add(Card(
+          child: ListTile(
+            dense: true,
+            leading: SizedBox(
+              width: 24,
+              height: 24,
+              child: Center(
+                  child: Text('${item.qty}x',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Theme.of(ctx).primaryColor))),
+            ),
+            title:
+                Text(item.product.name, style: const TextStyle(fontSize: 13)),
+            subtitle: item.variant != null
+                ? Text(item.variant!.name,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey))
+                : null,
+            trailing: SizedBox(
+              width: 90,
+              child: Text(fmt.format(item.subtotal),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+            ),
+            onTap: () => _showCartItemOptions(ctx, item),
+          ),
+        ));
+      }
+    }
+    return list;
+  }
+
+  Widget _buildCartItemTile(BuildContext ctx, CartItem item) {
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    if (item.bundleId != null) {
+      // This won't be called for bundle items - handled in _buildCartItemList
+      return const SizedBox.shrink();
+    }
+    return Card(
+      child: ListTile(
+        dense: true,
+        leading: SizedBox(
+          width: 24,
+          height: 24,
+          child: Center(
+              child: Text('${item.qty}x',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Theme.of(ctx).primaryColor))),
+        ),
+        title: Text(item.product.name, style: const TextStyle(fontSize: 13)),
+        subtitle: item.variant != null
+            ? Text(item.variant!.name,
+                style: const TextStyle(fontSize: 11, color: Colors.grey))
+            : null,
+        trailing: SizedBox(
+          width: 90,
+          child: Text(fmt.format(item.subtotal),
+              textAlign: TextAlign.right,
+              style:
+                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ),
+        onTap: () => _showCartItemOptions(ctx, item),
+      ),
+    );
+  }
 }
 
 void _showVariantPicker(BuildContext context, dynamic product) {
-  final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+  final fmt =
+      NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
   showConstrainedDialog(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -905,25 +1343,27 @@ void _showVariantPicker(BuildContext context, dynamic product) {
                 style: TextStyle(fontSize: 13, color: Colors.grey[600])),
             const SizedBox(height: 4),
             ...product.variants.map<Widget>((v) => ListTile(
-              dense: true,
-              title: Text(v.name),
-              subtitle: Text(fmt.format(product.price + v.priceAdjustment)),
-              onTap: () async {
-                // Block only when manageStock is ON and variant has no stock
-                if (ReceiptSettings.manageStock && v.stock <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Stok ${v.name} habis')),
-                  );
-                  return;
-                }
-                context.read<CartBloc>().add(CartAddItem(product, variant: v));
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text('${product.name} - ${v.name} ditambahkan'),
-                  duration: const Duration(milliseconds: 500),
-                ));
-              },
-            )),
+                  dense: true,
+                  title: Text(v.name),
+                  subtitle: Text(fmt.format(product.price + v.priceAdjustment)),
+                  onTap: () async {
+                    // Block only when manageStock is ON and variant has no stock
+                    if (ReceiptSettings.manageStock && v.stock <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Stok ${v.name} habis')),
+                      );
+                      return;
+                    }
+                    context
+                        .read<CartBloc>()
+                        .add(CartAddItem(product, variant: v));
+                    Navigator.pop(ctx);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('${product.name} - ${v.name} ditambahkan'),
+                      duration: const Duration(milliseconds: 500),
+                    ));
+                  },
+                )),
           ],
         ),
       ),
@@ -944,14 +1384,15 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
     return GestureDetector(
       onTap: () {
-          if (ReceiptSettings.manageStock && product.stock <= 0) {
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Stok habis!')));
-            return;
-          }
+        if (ReceiptSettings.manageStock && product.stock <= 0) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('Stok habis!')));
+          return;
+        }
         if (product.hasVariants) {
           _showVariantPicker(context, product);
           return;
@@ -982,10 +1423,15 @@ class _ProductCard extends StatelessWidget {
                           File(product.imagePath!),
                           fit: BoxFit.cover,
                           width: double.infinity,
-                          errorBuilder: (_, __, ___) =>
-                              _ProductInitial(name: product.name, outOfStock: ReceiptSettings.manageStock && product.stock <= 0),
+                          errorBuilder: (_, __, ___) => _ProductInitial(
+                              name: product.name,
+                              outOfStock: ReceiptSettings.manageStock &&
+                                  product.stock <= 0),
                         )
-                      : _ProductInitial(name: product.name, outOfStock: ReceiptSettings.manageStock && product.stock <= 0),
+                      : _ProductInitial(
+                          name: product.name,
+                          outOfStock: ReceiptSettings.manageStock &&
+                              product.stock <= 0),
                 ),
               ),
               SizedBox(height: compact ? 2 : 4),
@@ -994,10 +1440,9 @@ class _ProductCard extends StatelessWidget {
                     ? '${product.name.substring(0, compact ? 12 : 17)}...'
                     : product.name,
                 style: TextStyle(
-                  fontSize: compact ? 10 : 12,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).primaryColor
-                ),
+                    fontSize: compact ? 10 : 12,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).primaryColor),
               ),
               SizedBox(height: compact ? 1 : 2),
               Text(
@@ -1029,6 +1474,213 @@ class _ProductCard extends StatelessWidget {
   }
 }
 
+class _BundleCard extends StatelessWidget {
+  final Bundle bundle;
+  final bool compact;
+  const _BundleCard({required this.bundle, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    return GestureDetector(
+      onTap: () => _showBundleDetail(context, bundle),
+      child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(compact ? 4 : 8),
+          side: BorderSide(
+            color: Colors.orange.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(compact ? 4 : 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(compact ? 4 : 8),
+                    border: Border.all(color: Colors.orange),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.redeem,
+                        size: compact ? 20 : 28,
+                        color: Colors.orange,
+                      ),
+                      SizedBox(height: compact ? 2 : 4),
+                      Text(
+                        'BUNDLING',
+                        style: TextStyle(
+                          fontSize: compact ? 8 : 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: compact ? 2 : 4),
+              Text(
+                bundle.name.length > (compact ? 15 : 20)
+                    ? '${bundle.name.substring(0, compact ? 12 : 17)}...'
+                    : bundle.name,
+                style: TextStyle(
+                  fontSize: compact ? 10 : 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+              ),
+              SizedBox(height: compact ? 1 : 2),
+              Text(
+                fmt.format(bundle.price),
+                style: TextStyle(
+                  fontSize: compact ? 10 : 12,
+                  color: Colors.green,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+int _gcd(int a, int b) {
+  while (b != 0) {
+    final t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
+
+void _showBundleDetail(BuildContext context, Bundle bundle) async {
+  final dao = BundleDao();
+  final items = await dao.getItems(bundle.id!);
+  if (!context.mounted) return;
+  final fmt =
+      NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+  showConstrainedDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.redeem, color: Colors.orange),
+          const SizedBox(width: 8),
+          Expanded(child: Text(bundle.name)),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Harga Bundling: ${fmt.format(bundle.price)}',
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.green)),
+            const SizedBox(height: 12),
+            ...items.where((i) => i.product != null).map((i) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 8),
+                      Text('${i.qty} x ',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 14)),
+                      Expanded(
+                          child: Text(i.product!.name,
+                              style: const TextStyle(fontSize: 14))),
+                    ],
+                  ),
+                )),
+          ],
+        ),
+      ),
+      actions: [
+        OverflowBar(
+          alignment: MainAxisAlignment.end,
+          overflowAlignment: OverflowBarAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal'),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.add_shopping_cart, size: 18),
+              label: const Text('Tambah ke Keranjang'),
+              onPressed: () {
+                context.read<CartBloc>().add(CartAddBundle(bundle, items));
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text('${bundle.name} ditambahkan'),
+                  duration: const Duration(milliseconds: 500),
+                ));
+              },
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _EmptyProduct extends StatelessWidget {
+  const _EmptyProduct();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxHeight < 160;
+        return Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: compact ? 36 : 72,
+                  color: color.withValues(alpha: 0.5),
+                ),
+                SizedBox(height: compact ? 6 : 16),
+                Text(
+                  'Belum ada produk',
+                  style: TextStyle(fontSize: compact ? 14 : 16, color: color),
+                ),
+                if (!compact) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Tambahkan produk melalui menu Pengaturan',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: color.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ProductInitial extends StatelessWidget {
   final String name;
   final bool outOfStock;
@@ -1036,8 +1688,14 @@ class _ProductInitial extends StatelessWidget {
 
   Color _colorFromName(String name) {
     const colors = [
-      Colors.blue, Colors.teal, Colors.purple, Colors.indigo,
-      Colors.orange, Colors.pink, Colors.cyan, Colors.green,
+      Colors.blue,
+      Colors.teal,
+      Colors.purple,
+      Colors.indigo,
+      Colors.orange,
+      Colors.pink,
+      Colors.cyan,
+      Colors.green,
     ];
     return colors[name.codeUnitAt(0) % colors.length];
   }
@@ -1065,7 +1723,7 @@ class _ProductInitial extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text(
-             name.substring(0, 1).toUpperCase(),
+              name.substring(0, 1).toUpperCase(),
               style: TextStyle(
                 fontSize: 20,
                 color: outOfStock
@@ -1076,6 +1734,331 @@ class _ProductInitial extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TablePickerSheet extends StatefulWidget {
+  final List<RestoTable> tables;
+  final void Function(RestoTable) onSelected;
+  const _TablePickerSheet({required this.tables, required this.onSelected});
+
+  @override
+  State<_TablePickerSheet> createState() => _TablePickerSheetState();
+}
+
+class _TablePickerSheetState extends State<_TablePickerSheet> {
+  final _searchCtrl = TextEditingController();
+  List<RestoTable> _filtered = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.tables;
+  }
+
+  void _filter(String q) {
+    setState(() {
+      if (q.isEmpty) {
+        _filtered = widget.tables;
+      } else {
+        _filtered = widget.tables
+            .where((t) =>
+                t.name.toLowerCase().contains(q.toLowerCase()) ||
+                (t.note?.toLowerCase().contains(q.toLowerCase()) ?? false))
+            .toList();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Pilih Meja',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Cari meja...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                onChanged: _filter,
+              ),
+              const SizedBox(height: 12),
+              if (_filtered.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(
+                    child: Text(
+                      'Tidak ada meja',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 200,
+                  child: GridView.builder(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      childAspectRatio: 1,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                    ),
+                    itemCount: _filtered.length,
+                    itemBuilder: (ctx, i) {
+                      final t = _filtered[i];
+                      return InkWell(
+                        onTap: () => widget.onSelected(t),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.all(8),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                t.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${t.capacity} kursi',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              if (t.note != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  t.note!,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DraftPickerSheet extends StatefulWidget {
+  final OrderDao dao;
+  final List<Order> drafts;
+  final void Function(Order order, List<OrderItem> items) onPicked;
+  final VoidCallback onDeleted;
+  final VoidCallback? onDraftDeleted;
+
+  const _DraftPickerSheet({
+    required this.dao,
+    required this.drafts,
+    required this.onPicked,
+    required this.onDeleted,
+    this.onDraftDeleted,
+  });
+  @override
+  State<_DraftPickerSheet> createState() => _DraftPickerSheetState();
+}
+
+class _DraftPickerSheetState extends State<_DraftPickerSheet> {
+  late List<Order> _drafts;
+
+  @override
+  void initState() {
+    super.initState();
+    _drafts = List.from(widget.drafts);
+  }
+
+  Future<void> _delete(Order order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        title: const Text('Hapus Draft'),
+        content: Text('Hapus draft ${order.orderNumber}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx, false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx, true),
+            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await widget.dao.deleteDraftOrder(order.id!);
+      if (mounted) {
+        setState(() => _drafts.removeWhere((d) => d.id == order.id));
+        widget.onDeleted();
+        widget.onDraftDeleted?.call();
+        if (_drafts.isEmpty) Navigator.pop(context);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    final dateFmt = DateFormat('dd/MM/yyyy HH:mm');
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.inbox),
+                const SizedBox(width: 8),
+                const Text('Ambil Draft',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Tutup'),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _drafts.isEmpty
+                ? const Center(child: Text('Tidak ada draft'))
+                : ListView.builder(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _drafts.length,
+                    itemBuilder: (_, i) {
+                      final order = _drafts[i];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: InkWell(
+                          onTap: () async {
+                            final items =
+                                await widget.dao.getItemsByOrderId(order.id!);
+                            widget.onPicked(order, items);
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.receipt_long,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        order.orderNumber,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        dateFmt.format(
+                                            DateTime.parse(order.createdAt)),
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        fmt.format(order.total),
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline,
+                                      size: 20, color: Colors.red),
+                                  onPressed: () => _delete(order),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -1104,19 +2087,22 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
 
   Future<void> _load() async {
     final list = await _dao.getAll();
-    if (mounted) setState(() {
-      _customers = list;
-      _filtered = list;
-    });
+    if (mounted)
+      setState(() {
+        _customers = list;
+        _filtered = list;
+      });
   }
 
   void _onSearch(String v) {
     if (v.isEmpty) {
       setState(() => _filtered = _customers);
     } else {
-      setState(() => _filtered = _customers.where((c) =>
-          c.name.toLowerCase().contains(v.toLowerCase()) ||
-          (c.phone?.contains(v) ?? false)).toList());
+      setState(() => _filtered = _customers
+          .where((c) =>
+              c.name.toLowerCase().contains(v.toLowerCase()) ||
+              (c.phone?.contains(v) ?? false))
+          .toList());
     }
   }
 
@@ -1157,12 +2143,15 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
             onPressed: () {
               if (nameCtrl.text.trim().isEmpty) return;
               final now = DateTime.now().toIso8601String();
-              Navigator.pop(dCtx, Customer(
-                name: nameCtrl.text.trim(),
-                phone: phoneCtrl.text.trim().isEmpty
-                    ? null : phoneCtrl.text.trim(),
-                createdAt: now,
-              ));
+              Navigator.pop(
+                  dCtx,
+                  Customer(
+                    name: nameCtrl.text.trim(),
+                    phone: phoneCtrl.text.trim().isEmpty
+                        ? null
+                        : phoneCtrl.text.trim(),
+                    createdAt: now,
+                  ));
             },
             child: const Text('Simpan'),
           ),
@@ -1171,8 +2160,11 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
     );
     if (result != null) {
       final id = await _dao.insert(result);
-      final saved = Customer(id: id, name: result.name,
-          phone: result.phone, createdAt: result.createdAt);
+      final saved = Customer(
+          id: id,
+          name: result.name,
+          phone: result.phone,
+          createdAt: result.createdAt);
       if (mounted) _searchCtrl.text = saved.name;
       widget.onSelected(saved);
     }
@@ -1192,7 +2184,8 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
                 const Icon(Icons.person),
                 const SizedBox(width: 8),
                 const Text('Pilih Pelanggan',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const Spacer(),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
@@ -1223,39 +2216,53 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
             const SizedBox(height: 4),
             Expanded(
               child: _filtered.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.person_off,
-                            size: 64,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ? LayoutBuilder(
+                      builder: (context, constraints) {
+                        final compact = constraints.maxHeight < 110;
+                        final color =
+                            Theme.of(context).colorScheme.onSurfaceVariant;
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.person_off,
+                                size: compact ? 36 : 64,
+                                color: color,
+                              ),
+                              SizedBox(height: compact ? 4 : 8),
+                              Text(
+                                _searchCtrl.text.trim().isNotEmpty
+                                    ? 'Pelanggan tidak ditemukan'
+                                    : 'Tidak ada pelanggan',
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: compact ? 12 : 14,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _searchCtrl.text.trim().isNotEmpty
-                                ? 'Pelanggan tidak ditemukan'
-                                : 'Tidak ada pelanggan',
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     )
                   : ListView.builder(
                       itemCount: _filtered.length,
                       itemBuilder: (_, i) {
                         final c = _filtered[i];
                         return Card(
-                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer,
                               child: Text(
                                 c.name[0].toUpperCase(),
                                 style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onPrimaryContainer,
                                 ),
                               ),
                             ),

@@ -26,7 +26,7 @@ class DatabaseHelper {
 
   Future<Database> _initDb() async {
     _dbPath = join(await getDatabasesPath(), 'mobilepos.db');
-    return openDatabase(_dbPath!, version: 9, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return openDatabase(_dbPath!, version: 14, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -129,6 +129,85 @@ class DatabaseHelper {
         ''');
       } catch (_) {}
     }
+    // Version 10: Add bundles table
+    if (oldVersion < 10) {
+      await db.execute('''
+        CREATE TABLE bundles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          price REAL NOT NULL,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE bundle_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          bundle_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          qty INTEGER NOT NULL DEFAULT 1,
+          FOREIGN KEY (bundle_id) REFERENCES bundles(id) ON DELETE CASCADE,
+          FOREIGN KEY (product_id) REFERENCES products(id)
+        )
+      ''');
+      try {
+        await db.execute('''
+          ALTER TABLE order_items ADD COLUMN bundle_name TEXT
+        ''');
+      } catch (_) {}
+    }
+    // Version 11: Add tables table
+    if (oldVersion < 11) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS tables (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          capacity INTEGER NOT NULL DEFAULT 4,
+          note TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL
+        )
+      ''');
+    }
+    // Version 12: Add bundle_id & bundle_adjusted_price to order_items
+    if (oldVersion < 12) {
+      try {
+        await db.execute('''
+          ALTER TABLE order_items ADD COLUMN bundle_id INTEGER
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          ALTER TABLE order_items ADD COLUMN bundle_adjusted_price REAL
+        ''');
+      } catch (_) {}
+    }
+    // Version 13: Ensure table_id column exists on orders
+    if (oldVersion < 13) {
+      try {
+        await db.execute('''
+          ALTER TABLE orders ADD COLUMN table_id INTEGER
+        ''');
+      } catch (_) {}
+    }
+    // Version 14: Ensure bundle columns exist on order_items
+    if (oldVersion < 14) {
+      try {
+        await db.execute('''
+          ALTER TABLE order_items ADD COLUMN bundle_name TEXT
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          ALTER TABLE order_items ADD COLUMN bundle_id INTEGER
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          ALTER TABLE order_items ADD COLUMN bundle_adjusted_price REAL
+        ''');
+      } catch (_) {}
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -195,6 +274,7 @@ class DatabaseHelper {
         shift_id INTEGER,
         user_id INTEGER NOT NULL,
         customer_id INTEGER,
+        table_id INTEGER,
         subtotal REAL NOT NULL,
         discount_amount REAL NOT NULL DEFAULT 0,
         discount_type TEXT,
@@ -219,6 +299,9 @@ class DatabaseHelper {
         product_id INTEGER NOT NULL,
         product_name TEXT NOT NULL,
         variant_name TEXT,
+        bundle_name TEXT,
+        bundle_id INTEGER,
+        bundle_adjusted_price REAL,
         price REAL NOT NULL,
         qty INTEGER NOT NULL,
         subtotal REAL NOT NULL,
@@ -279,6 +362,38 @@ class DatabaseHelper {
         price_adjustment REAL NOT NULL DEFAULT 0,
         stock INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE bundles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        price REAL NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE bundle_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bundle_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        qty INTEGER NOT NULL DEFAULT 1,
+        FOREIGN KEY (bundle_id) REFERENCES bundles(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products(id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE tables (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        capacity INTEGER NOT NULL DEFAULT 4,
+        note TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
       )
     ''');
 

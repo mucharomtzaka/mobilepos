@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../core/database/transaction_dao.dart';
 import '../../../core/models/transaction.dart';
 import '../../../core/utils/responsive_dialog.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 import '../../shift/bloc/shift_bloc.dart';
 
 class ExpensePage extends StatefulWidget {
@@ -109,8 +110,7 @@ class _ExpensePageState extends State<ExpensePage> {
     final amountCtrl = TextEditingController(
       text: existing != null ? amountFmt.format(existing.amount.toInt()) : '',
     );
-    final descCtrl =
-        TextEditingController(text: existing?.description ?? '');
+    final descCtrl = TextEditingController(text: existing?.description ?? '');
     final formKey = GlobalKey<FormState>();
 
     void formatAmount() {
@@ -133,7 +133,8 @@ class _ExpensePageState extends State<ExpensePage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(existing != null ? 'Edit Pengeluaran' : 'Tambah Pengeluaran'),
+          title: Text(
+              existing != null ? 'Edit Pengeluaran' : 'Tambah Pengeluaran'),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -141,7 +142,8 @@ class _ExpensePageState extends State<ExpensePage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<String>(
-                    initialValue: _categories.contains(category) ? category : 'Lainnya',
+                    initialValue:
+                        _categories.contains(category) ? category : 'Lainnya',
                     decoration: const InputDecoration(
                       labelText: 'Kategori',
                       border: OutlineInputBorder(),
@@ -163,7 +165,8 @@ class _ExpensePageState extends State<ExpensePage> {
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Masukkan jumlah';
                       final raw = v.replaceAll('.', '');
-                      if (double.tryParse(raw) == null || double.parse(raw) <= 0) {
+                      if (double.tryParse(raw) == null ||
+                          double.parse(raw) <= 0) {
                         return 'Jumlah tidak valid';
                       }
                       return null;
@@ -248,7 +251,8 @@ class _ExpensePageState extends State<ExpensePage> {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
+    final fmt =
+        NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pengeluaran'),
@@ -261,84 +265,100 @@ class _ExpensePageState extends State<ExpensePage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.red.withValues(alpha: 0.1),
-                  child: Text(
-                    'Total: ${fmt.format(_total)}',
-                    style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.red),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                if (_shiftStart != null)
+          : Padding(
+              padding: ResponsivePageInsets.horizontal(context,
+                  maxContentWidth: 720),
+              child: Column(
+                children: [
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                    padding: const EdgeInsets.all(16),
+                    color: Colors.red.withValues(alpha: 0.1),
                     child: Text(
-                      'Menampilkan data shift aktif',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      'Total: ${fmt.format(_total)}',
+                      style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red),
+                      textAlign: TextAlign.center,
                     ),
                   ),
-                Expanded(
-                  child: _list.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.trending_down, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                              const SizedBox(height: 8),
-                              Text('Belum ada pengeluaran', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-                            ],
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            itemCount: _list.length + (_hasMore ? 1 : 0),
-                            itemBuilder: (_, i) {
-                              if (i >= _list.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(child: CircularProgressIndicator()),
+                  if (_shiftStart != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 2),
+                      child: Text(
+                        'Menampilkan data shift aktif',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ),
+                  Expanded(
+                    child: _list.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.trending_down,
+                                    size: 48,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant),
+                                const SizedBox(height: 8),
+                                Text('Belum ada pengeluaran',
+                                    style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant)),
+                              ],
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _load,
+                            child: ListView.builder(
+                              controller: _scrollController,
+                              itemCount: _list.length + (_hasMore ? 1 : 0),
+                              itemBuilder: (_, i) {
+                                if (i >= _list.length) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(
+                                        child: CircularProgressIndicator()),
+                                  );
+                                }
+                                final t = _list[i];
+                                return Card(
+                                  margin: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
+                                  child: ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor:
+                                          Colors.red.withValues(alpha: 0.15),
+                                      child: const Icon(Icons.trending_down,
+                                          color: Colors.red),
+                                    ),
+                                    title: Text(t.category),
+                                    subtitle: Text(
+                                      '${t.description ?? ''}${t.description != null ? ' • ' : ''}${DateFormat('dd/MM/yyyy').format(DateTime.parse(t.createdAt))}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: Text(
+                                      fmt.format(t.amount),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.red),
+                                    ),
+                                    onTap: () => _showForm(t),
+                                    onLongPress: () => _delete(t),
+                                  ),
                                 );
-                              }
-                              final t = _list[i];
-                              return Card(
-                                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: Colors.red.withValues(alpha: 0.15),
-                                    child: const Icon(Icons.trending_down,
-                                        color: Colors.red),
-                                  ),
-                                  title: Text(t.category),
-                                  subtitle: Text(
-                                    '${t.description ?? ''}${t.description != null ? ' • ' : ''}${DateFormat('dd/MM/yyyy').format(DateTime.parse(t.createdAt))}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  trailing: Text(
-                                    fmt.format(t.amount),
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.red),
-                                  ),
-                                  onTap: () => _showForm(t),
-                                  onLongPress: () => _delete(t),
-                                ),
-                              );
-                            },
+                              },
+                            ),
                           ),
-                        ),
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
     );
   }

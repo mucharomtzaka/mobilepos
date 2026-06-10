@@ -4,12 +4,15 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../../core/utils/custom_image_picker.dart';
 import '../bloc/product_bloc.dart';
 import '../../../core/models/category.dart';
 import '../../../core/models/product.dart';
 import '../../../core/models/product_variant.dart';
 import '../../../core/utils/responsive_dialog.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 
 class ProductFormPage extends StatefulWidget {
   final Product? product;
@@ -67,9 +70,15 @@ class _ProductFormPageState extends State<ProductFormPage> {
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  bool _isPickingImage = false;
+  final _imagePicker = ImagePicker();
+
+  Future<void> _pickImage(bool fromCamera) async {
+    if (_isPickingImage) return;
+    _isPickingImage = true;
+
     try {
-      if (source == ImageSource.camera) {
+      if (fromCamera) {
         final status = await Permission.camera.request();
         if (!status.isGranted) {
           if (mounted) {
@@ -77,17 +86,37 @@ class _ProductFormPageState extends State<ProductFormPage> {
               const SnackBar(content: Text('Izin kamera ditolak')),
             );
           }
+          _isPickingImage = false;
           return;
         }
-      }
-
-      final picked = await ImagePicker().pickImage(
-        source: source,
-        maxWidth: 600,
-        imageQuality: 80,
-      );
-      if (picked != null && mounted) {
-        setState(() => _imagePath = picked.path);
+        final picked = await _imagePicker.pickImage(
+          source: ImageSource.camera,
+          maxWidth: 600,
+          imageQuality: 80,
+        );
+        if (picked != null && mounted) {
+          final fileName =
+              'product_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final savedPath = await _copyImageToAppDir(picked.path, fileName);
+          setState(() => _imagePath = savedPath ?? picked.path);
+        }
+      } else {
+        final status = await Permission.storage.request();
+        if (!status.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Izin galeri ditolak')),
+            );
+          }
+          _isPickingImage = false;
+          return;
+        }
+        if (mounted) {
+          final path = await CustomImagePicker.pickImage(context);
+          if (path != null && mounted) {
+            setState(() => _imagePath = path);
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -95,6 +124,23 @@ class _ProductFormPageState extends State<ProductFormPage> {
           SnackBar(content: Text('Gagal memilih gambar: $e')),
         );
       }
+    } finally {
+      _isPickingImage = false;
+    }
+  }
+
+  Future<String?> _copyImageToAppDir(String sourcePath, String fileName) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final destDir = Directory('${appDir.path}/product_images');
+      if (!await destDir.exists()) {
+        await destDir.create(recursive: true);
+      }
+      final destPath = '${destDir.path}/$fileName';
+      await File(sourcePath).copy(destPath);
+      return destPath;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -110,7 +156,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
               title: const Text('Ambil Foto'),
               onTap: () {
                 Navigator.pop(context);
-                _pickImage(ImageSource.camera);
+                _pickImage(true); // fromCamera = true
               },
             ),
             ListTile(
@@ -118,7 +164,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
               title: const Text('Pilih dari Galeri'),
               onTap: () {
                 Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
+                _pickImage(false); // fromCamera = false
               },
             ),
             if (_imagePath != null)
@@ -151,7 +197,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
             children: [
               TextField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Nama Varian',
+                decoration: const InputDecoration(
+                    labelText: 'Nama Varian',
                     hintText: 'Contoh: Ukuran M, Warna Merah'),
               ),
               const SizedBox(height: 8),
@@ -159,22 +206,21 @@ class _ProductFormPageState extends State<ProductFormPage> {
                 controller: priceCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                    labelText: 'Selisih Harga (opsional)',
-                    hintText: '0'),
+                    labelText: 'Selisih Harga (opsional)', hintText: '0'),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: stockCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                    labelText: 'Stok Varian (opsional)',
-                    hintText: '0'),
+                    labelText: 'Stok Varian (opsional)', hintText: '0'),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           ElevatedButton(
             onPressed: () {
               final name = nameCtrl.text.trim();
@@ -199,7 +245,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
   void _editVariant(int index) {
     final v = _variants[index];
     final nameCtrl = TextEditingController(text: v.name);
-    final priceCtrl = TextEditingController(text: v.priceAdjustment.toStringAsFixed(0));
+    final priceCtrl =
+        TextEditingController(text: v.priceAdjustment.toStringAsFixed(0));
     final stockCtrl = TextEditingController(text: v.stock.toString());
     showConstrainedDialog(
       context: context,
@@ -218,22 +265,21 @@ class _ProductFormPageState extends State<ProductFormPage> {
                 controller: priceCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                    labelText: 'Selisih Harga',
-                    hintText: '0'),
+                    labelText: 'Selisih Harga', hintText: '0'),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: stockCtrl,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                    labelText: 'Stok Varian',
-                    hintText: '0'),
+                    labelText: 'Stok Varian', hintText: '0'),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           ElevatedButton(
             onPressed: () {
               final name = nameCtrl.text.trim();
@@ -288,7 +334,9 @@ class _ProductFormPageState extends State<ProductFormPage> {
               child: const Text('Batal')),
           TextButton(
             onPressed: () {
-              context.read<ProductBloc>().add(ProductDelete(widget.product!.id!));
+              context
+                  .read<ProductBloc>()
+                  .add(ProductDelete(widget.product!.id!));
               Navigator.pop(context);
               Navigator.pop(context);
             },
@@ -302,8 +350,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<ProductBloc>().state;
-    final categories = state is ProductLoaded 
-        ? state.categories.toSet().toList() 
+    final categories = state is ProductLoaded
+        ? state.categories.toSet().toList()
         : <Category>[];
 
     return Scaffold(
@@ -319,7 +367,12 @@ class _ProductFormPageState extends State<ProductFormPage> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 80),
+          padding: ResponsivePageInsets.content(
+            context,
+            maxContentWidth: 640,
+            top: 16,
+            bottom: MediaQuery.of(context).padding.bottom + 80,
+          ),
           children: [
             // Image picker
             GestureDetector(
@@ -341,7 +394,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           errorBuilder: (_, __, ___) => Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.broken_image, size: 40, color: Colors.grey[400]),
+                              Icon(Icons.broken_image,
+                                  size: 40, color: Colors.grey[400]),
                               const SizedBox(height: 8),
                               Text('Gambar tidak ditemukan',
                                   style: TextStyle(color: Colors.grey[500])),
@@ -363,7 +417,9 @@ class _ProductFormPageState extends State<ProductFormPage> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int?>(
-              value: categories.any((c) => c.id == _categoryId) ? _categoryId : null,
+              value: categories.any((c) => c.id == _categoryId)
+                  ? _categoryId
+                  : null,
               decoration: const InputDecoration(
                   labelText: 'Kategori', border: OutlineInputBorder()),
               items: [
@@ -388,7 +444,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
                   child: TextFormField(
                     controller: _barcode,
                     decoration: const InputDecoration(
-                        labelText: 'Barcode (opsional)', border: OutlineInputBorder()),
+                        labelText: 'Barcode (opsional)',
+                        border: OutlineInputBorder()),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -417,7 +474,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
                   labelText: 'Harga', border: OutlineInputBorder()),
               validator: (v) {
                 if (v!.isEmpty) return 'Wajib diisi';
-                if (int.tryParse(v.replaceAll('.', '')) == null) return 'Harga tidak valid';
+                if (int.tryParse(v.replaceAll('.', '')) == null)
+                  return 'Harga tidak valid';
                 return null;
               },
             ),
@@ -450,7 +508,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Varian Produk',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 TextButton.icon(
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Tambah Varian'),
@@ -461,7 +520,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
             if (_variants.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('Tidak ada varian. Produk akan dijual tanpa varian.',
+                child: Text(
+                    'Tidak ada varian. Produk akan dijual tanpa varian.',
                     style: TextStyle(color: Colors.grey, fontSize: 13)),
               )
             else
@@ -473,8 +533,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
                     dense: true,
                     title: Text(v.name),
                     subtitle: Text(
-                      '${v.priceAdjustment > 0 ? '+Rp ${v.priceAdjustment.toStringAsFixed(0)}' : 'Harga dasar'}'
-                      '${v.stock > 0 ? ' • Stok: ${v.stock}' : ''}'),
+                        '${v.priceAdjustment > 0 ? '+Rp ${v.priceAdjustment.toStringAsFixed(0)}' : 'Harga dasar'}'
+                        '${v.stock > 0 ? ' • Stok: ${v.stock}' : ''}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -483,8 +543,10 @@ class _ProductFormPageState extends State<ProductFormPage> {
                           onPressed: () => _editVariant(e.key),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                          onPressed: () => setState(() => _variants.removeAt(e.key)),
+                          icon: const Icon(Icons.delete,
+                              size: 18, color: Colors.red),
+                          onPressed: () =>
+                              setState(() => _variants.removeAt(e.key)),
                         ),
                       ],
                     ),
@@ -509,7 +571,8 @@ class _ProductFormPageState extends State<ProductFormPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Izin kamera ditolak permanen. Izinkan di pengaturan aplikasi.'),
+              content: const Text(
+                  'Izin kamera ditolak permanen. Izinkan di pengaturan aplikasi.'),
               action: SnackBarAction(
                 label: 'Buka Pengaturan',
                 onPressed: openAppSettings,
@@ -529,7 +592,7 @@ class _ProductFormPageState extends State<ProductFormPage> {
         return null;
       }
     }
-    
+
     String? result;
     await Navigator.push(
       context,

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 import '../bloc/product_bloc.dart';
 import '../../../core/models/category.dart';
+import '../../../core/utils/responsive_page_insets.dart';
 import 'product_form_page.dart';
 
 class ProductPage extends StatefulWidget {
@@ -84,58 +85,64 @@ class _ProductPageState extends State<ProductPage> {
         ),
         child: const Icon(Icons.add),
       ),
-      body: BlocBuilder<ProductBloc, ProductState>(
-        builder: (ctx, state) {
-          final categories =
-              state is ProductLoaded ? state.categories : <Category>[];
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _search,
-                        decoration: const InputDecoration(
-                          hintText: 'Cari produk...',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                          isDense: true,
+      body: Padding(
+        padding: ResponsivePageInsets.horizontal(context, maxContentWidth: 960),
+        child: BlocBuilder<ProductBloc, ProductState>(
+          builder: (ctx, state) {
+            final categories =
+                state is ProductLoaded ? state.categories : <Category>[];
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _search,
+                          decoration: const InputDecoration(
+                            hintText: 'Cari produk...',
+                            prefixIcon: Icon(Icons.search),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _reload(),
                         ),
-                        onSubmitted: (_) => _reload(),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: DropdownButton<int?>(
+                          value:
+                              categories.any((c) => c.id == _selectedCategoryId)
+                                  ? _selectedCategoryId
+                                  : null,
+                          hint: const Text('Semua'),
+                          underline: const SizedBox(),
+                          items: [
+                            const DropdownMenuItem(
+                                value: null, child: Text('Semua')),
+                            ...categories.map((c) => DropdownMenuItem(
+                                value: c.id, child: Text(c.name))),
+                          ],
+                          onChanged: (v) {
+                            setState(() => _selectedCategoryId = v);
+                            _reload();
+                          },
+                        ),
                       ),
-                      child: DropdownButton<int?>(
-                        value: categories.any((c) => c.id == _selectedCategoryId) ? _selectedCategoryId : null,
-                        hint: const Text('Semua'),
-                        underline: const SizedBox(),
-                        items: [
-                          const DropdownMenuItem(
-                              value: null, child: Text('Semua')),
-                          ...categories.map((c) => DropdownMenuItem(
-                              value: c.id, child: Text(c.name))),
-                        ],
-                        onChanged: (v) {
-                          setState(() => _selectedCategoryId = v);
-                          _reload();
-                        },
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Expanded(child: _buildList(ctx, state)),
-            ],
-          );
-        },
+                Expanded(child: _buildList(ctx, state)),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -150,8 +157,8 @@ class _ProductPageState extends State<ProductPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.inventory_2, size: 64,
-                  color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+              Icon(Icons.inventory_2,
+                  size: 64, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
               const SizedBox(height: 12),
               Text('Belum ada produk',
                   style: TextStyle(
@@ -184,10 +191,11 @@ class _ProductPageState extends State<ProductPage> {
                   )
                 : CircleAvatar(child: Text(p.name[0].toUpperCase())),
             title: Text(p.name),
-            subtitle: Text(
-                '${p.categoryName ?? '-'} • Stok: ${p.stock} ${p.unit}'),
+            subtitle:
+                Text('${p.categoryName ?? '-'} • Stok: ${p.stock} ${p.unit}'),
             trailing: Text(
-              NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0)
+              NumberFormat.currency(
+                      locale: 'id', symbol: 'Rp ', decimalDigits: 0)
                   .format(p.price),
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
