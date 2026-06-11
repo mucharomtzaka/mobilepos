@@ -13,6 +13,7 @@ import '../../../core/models/product.dart';
 import '../../../core/models/product_variant.dart';
 import '../../../core/utils/responsive_dialog.dart';
 import '../../../core/utils/responsive_page_insets.dart';
+import '../../../core/utils/scanner_overlay_painter.dart';
 
 class ProductFormPage extends StatefulWidget {
   final Product? product;
@@ -628,48 +629,100 @@ class _BarcodeScannerPage extends StatefulWidget {
   State<_BarcodeScannerPage> createState() => _BarcodeScannerPageState();
 }
 
-class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
+class _BarcodeScannerPageState extends State<_BarcodeScannerPage>
+    with SingleTickerProviderStateMixin {
   final _controller = MobileScannerController(useNewCameraSelector: true);
+  bool _detected = false;
+  late AnimationController _animCtrl;
+  late Animation<double> _lineAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+    _lineAnim = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _animCtrl, curve: Curves.easeInOut),
+    );
+  }
 
   @override
   void dispose() {
+    _animCtrl.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final scanSize = size.width * 0.75;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan Barcode')),
-      body: MobileScanner(
-        controller: _controller,
-        onDetect: (capture) {
-          final barcodes = capture.barcodes;
-          if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
-            widget.onDetect(barcodes.first.rawValue!);
-          }
-        },
-        errorBuilder: (context, error, child) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                const SizedBox(height: 16),
-                Text(
-                    'Gagal mengakses kamera: ${error.errorDetails?.message ?? error.errorCode.name}'),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => _controller.start(),
-                  child: const Text('Coba Lagi'),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: _controller,
+            onDetect: (capture) {
+              if (_detected) return;
+              final barcodes = capture.barcodes;
+              if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                _detected = true;
+                widget.onDetect(barcodes.first.rawValue!);
+              }
+            },
+            errorBuilder: (context, error, child) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text(
+                        'Gagal mengakses kamera: ${error.errorDetails?.message ?? error.errorCode.name}'),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => _controller.start(),
+                      child: const Text('Coba Lagi'),
+                    ),
+                  ],
                 ),
-              ],
+              );
+            },
+            placeholderBuilder: (context, child) {
+              return const Center(child: CircularProgressIndicator());
+            },
+          ),
+          CustomPaint(
+            size: size,
+            painter: ScannerOverlayPainter(
+              scanRect: Rect.fromCenter(
+                center: Offset(size.width / 2, size.height / 2 - 40),
+                width: scanSize,
+                height: scanSize * 0.5,
+              ),
+              lineProgress: _lineAnim.value,
             ),
-          );
-        },
-        placeholderBuilder: (context, child) {
-          return const Center(child: CircularProgressIndicator());
-        },
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 8,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 8,
+            child: IconButton(
+              icon: const Icon(Icons.flashlight_on, color: Colors.white),
+              onPressed: () => _controller.toggleTorch(),
+            ),
+          ),
+        ],
       ),
     );
   }
