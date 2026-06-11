@@ -18,6 +18,7 @@ import '../../cashflow/ui/finance_page.dart';
 import '../ui/backup_page.dart';
 import '../ui/theme_page.dart';
 import '../ui/profile_page.dart';
+import '../ui/privacy_policy_page.dart';
 import '../ui/table_management_page.dart';
 import '../../../core/database/product_dao.dart';
 import '../../../core/database/stock_dao.dart';
@@ -204,6 +205,16 @@ class SettingsPage extends StatelessWidget {
             ),
           ),
           const Divider(height: 24),
+          _SettingsTile(
+            icon: Icons.privacy_tip,
+            title: 'Kebijakan Privasi',
+            subtitle: 'Informasi pengumpulan dan penggunaan data',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const PrivacyPolicyPage()),
+            ),
+          ),
           _SettingsTile(
             icon: Icons.info,
             title: 'Tentang Aplikasi',

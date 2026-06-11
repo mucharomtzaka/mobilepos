@@ -1573,9 +1573,11 @@ void _showBundleDetail(BuildContext context, Bundle bundle) async {
     builder: (ctx) => AlertDialog(
       title: Row(
         children: [
-          const Icon(Icons.redeem, color: Colors.orange),
+          const Icon(Icons.redeem, color: Colors.orange, size: 20),
           const SizedBox(width: 8),
-          Expanded(child: Text(bundle.name)),
+          Expanded(
+              child: Text(bundle.name,
+                  style: const TextStyle(fontSize: 16))),
         ],
       ),
       content: SingleChildScrollView(
@@ -1586,20 +1588,20 @@ void _showBundleDetail(BuildContext context, Bundle bundle) async {
             Text('Harga Bundling: ${fmt.format(bundle.price)}',
                 style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    fontSize: 14,
                     color: Colors.green)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             ...items.where((i) => i.product != null).map((i) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(
                     children: [
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
                       Text('${i.qty} x ',
                           style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14)),
+                              fontWeight: FontWeight.bold, fontSize: 13)),
                       Expanded(
                           child: Text(i.product!.name,
-                              style: const TextStyle(fontSize: 14))),
+                              style: const TextStyle(fontSize: 13))),
                     ],
                   ),
                 )),
@@ -1616,9 +1618,7 @@ void _showBundleDetail(BuildContext context, Bundle bundle) async {
               child: const Text('Batal'),
             ),
             const SizedBox(width: 8),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.add_shopping_cart, size: 18),
-              label: const Text('Tambah ke Keranjang'),
+            ElevatedButton(
               onPressed: () {
                 context.read<CartBloc>().add(CartAddBundle(bundle, items));
                 Navigator.pop(ctx);
@@ -1627,6 +1627,7 @@ void _showBundleDetail(BuildContext context, Bundle bundle) async {
                   duration: const Duration(milliseconds: 500),
                 ));
               },
+              child: const Text('Tambah'),
             ),
           ],
         ),

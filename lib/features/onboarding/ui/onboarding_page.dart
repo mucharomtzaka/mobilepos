@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../../../core/utils/custom_image_picker.dart';
 
 const _kOnboardingKey = 'onboarding_completed';
 
@@ -57,10 +58,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   Future<void> _done() async {
-    await [
-      Permission.camera,
-      Permission.storage,
-    ].request();
+    await Permission.camera.request();
+    await CustomImagePicker.requestGalleryPermission();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kOnboardingKey, true);
     if (!mounted) return;

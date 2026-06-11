@@ -81,12 +81,24 @@ class _ProductFormPageState extends State<ProductFormPage> {
       if (fromCamera) {
         final status = await Permission.camera.request();
         if (!status.isGranted) {
-          if (mounted) {
+          if (status.isPermanentlyDenied) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text(
+                      'Izin kamera ditolak permanen. Izinkan di pengaturan aplikasi.'),
+                  action: const SnackBarAction(
+                    label: 'Buka Pengaturan',
+                    onPressed: openAppSettings,
+                  ),
+                ),
+              );
+            }
+          } else if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Izin kamera ditolak')),
             );
           }
-          _isPickingImage = false;
           return;
         }
         final picked = await _imagePicker.pickImage(
@@ -101,14 +113,13 @@ class _ProductFormPageState extends State<ProductFormPage> {
           setState(() => _imagePath = savedPath ?? picked.path);
         }
       } else {
-        final status = await Permission.storage.request();
-        if (!status.isGranted) {
+        final granted = await CustomImagePicker.requestGalleryPermission();
+        if (!granted) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Izin galeri ditolak')),
             );
           }
-          _isPickingImage = false;
           return;
         }
         if (mounted) {

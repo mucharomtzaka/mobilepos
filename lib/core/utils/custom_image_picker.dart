@@ -1,10 +1,22 @@
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class CustomImagePicker {
   static const _channel = MethodChannel('com.umkm.mobilepos/image_picker');
+
+  static Future<bool> requestGalleryPermission() async {
+    if (Platform.isAndroid) {
+      var status = await Permission.photos.request();
+      if (status.isGranted) return true;
+      if (status.isPermanentlyDenied) return false;
+      status = await Permission.storage.request();
+      return status.isGranted;
+    }
+    return true;
+  }
 
   static Future<String?> pickImage(BuildContext context) async {
     try {
