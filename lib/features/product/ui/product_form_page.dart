@@ -608,20 +608,69 @@ class _ProductFormPageState extends State<ProductFormPage> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Scan Barcode')),
-          body: MobileScanner(
-            onDetect: (capture) {
-              final barcodes = capture.barcodes;
-              if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
-                result = barcodes.first.rawValue;
-                Navigator.pop(context, result);
-              }
-            },
-          ),
+        builder: (_) => _BarcodeScannerPage(
+          onDetect: (value) {
+            result = value;
+            Navigator.pop(context, result);
+          },
         ),
       ),
     );
     return result;
+  }
+}
+
+class _BarcodeScannerPage extends StatefulWidget {
+  final void Function(String value) onDetect;
+  const _BarcodeScannerPage({required this.onDetect});
+
+  @override
+  State<_BarcodeScannerPage> createState() => _BarcodeScannerPageState();
+}
+
+class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
+  final _controller = MobileScannerController(useNewCameraSelector: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Scan Barcode')),
+      body: MobileScanner(
+        controller: _controller,
+        onDetect: (capture) {
+          final barcodes = capture.barcodes;
+          if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+            widget.onDetect(barcodes.first.rawValue!);
+          }
+        },
+        errorBuilder: (context, error, child) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 16),
+                Text(
+                    'Gagal mengakses kamera: ${error.errorDetails?.message ?? error.errorCode.name}'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => _controller.start(),
+                  child: const Text('Coba Lagi'),
+                ),
+              ],
+            ),
+          );
+        },
+        placeholderBuilder: (context, child) {
+          return const Center(child: CircularProgressIndicator());
+        },
+      ),
+    );
   }
 }

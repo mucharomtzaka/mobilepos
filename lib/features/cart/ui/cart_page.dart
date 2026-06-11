@@ -1144,7 +1144,7 @@ class BarcodeScanPage extends StatefulWidget {
 class _BarcodeScanPageState extends State<BarcodeScanPage>
     with SingleTickerProviderStateMixin {
   final _dao = ProductDao();
-  final _controller = MobileScannerController();
+  final _controller = MobileScannerController(useNewCameraSelector: true);
   bool _processing = false;
   late AnimationController _animCtrl;
   late Animation<double> _lineAnim;
