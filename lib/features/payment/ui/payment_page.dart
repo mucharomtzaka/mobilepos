@@ -73,6 +73,74 @@ class _PaymentViewState extends State<_PaymentView> {
     _amountCtrl.clear();
   }
 
+  void _addTransferWithReference(BuildContext ctx, double remaining) {
+    final nameCtrl = TextEditingController();
+    final accCtrl = TextEditingController();
+    showDialog(
+      context: ctx,
+      builder: (dCtx) => AlertDialog(
+        title: const Text('Referensi Transfer'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Nama Pengirim',
+                hintText: 'Cth: Budi Santoso',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: accCtrl,
+              decoration: const InputDecoration(
+                labelText: 'No Rekening',
+                hintText: 'Cth: 1234567890',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              nameCtrl.dispose();
+              accCtrl.dispose();
+              Navigator.pop(dCtx);
+            },
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final parts = <String>[];
+              if (nameCtrl.text.trim().isNotEmpty) {
+                parts.add(nameCtrl.text.trim());
+              }
+              if (accCtrl.text.trim().isNotEmpty) {
+                parts.add(accCtrl.text.trim());
+              }
+              final ref = parts.isNotEmpty ? parts.join(' - ') : null;
+              ctx.read<PaymentBloc>().add(
+                    PaymentAddEntry(
+                      PaymentEntry(
+                        method: PaymentMethod.transfer,
+                        amount: remaining,
+                        reference: ref,
+                      ),
+                    ),
+                  );
+              nameCtrl.dispose();
+              accCtrl.dispose();
+              Navigator.pop(dCtx);
+            },
+            child: const Text('Konfirmasi'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _confirm(BuildContext ctx) {
     final cartState = ctx.read<CartBloc>().state;
     final authState = ctx.read<AuthBloc>().state;
@@ -232,7 +300,7 @@ class _PaymentViewState extends State<_PaymentView> {
                   if (remaining > 0 && entries.isEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 16),
-                      child: _buildPaymentMethodSelector(ctx),
+                            child: _buildPaymentMethodSelector(ctx, remaining),
                     ),
                 ],
               ),
@@ -276,7 +344,7 @@ class _PaymentViewState extends State<_PaymentView> {
                         if (remaining > 0 && entries.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
-                            child: _buildPaymentMethodSelector(ctx),
+                      child: _buildPaymentMethodSelector(ctx, remaining),
                           ),
                         const SizedBox(height: 8),
                         // Action buttons
@@ -382,7 +450,7 @@ class _PaymentViewState extends State<_PaymentView> {
     );
   }
 
-  Widget _buildPaymentMethodSelector(BuildContext ctx) {
+  Widget _buildPaymentMethodSelector(BuildContext ctx, double remaining) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Wrap(
@@ -391,8 +459,16 @@ class _PaymentViewState extends State<_PaymentView> {
             .map((m) => ChoiceChip(
                   label: Text(m.label),
                   selected: _selectedMethod == m,
-                  onSelected: (_) =>
-                      setState(() => _selectedMethod = m),
+                  onSelected: (_) {
+                    setState(() => _selectedMethod = m);
+                    if (m != PaymentMethod.tunai && remaining > 0) {
+                      if (m == PaymentMethod.transfer) {
+                        _addTransferWithReference(ctx, remaining);
+                      } else {
+                        _addEntry(ctx, remaining);
+                      }
+                    }
+                  },
                 ))
             .toList(),
       ),
@@ -406,7 +482,7 @@ class _PaymentViewState extends State<_PaymentView> {
         const Text('Tambah Pembayaran',
             style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        _buildPaymentMethodSelector(ctx),
+        _buildPaymentMethodSelector(ctx, remaining),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -422,10 +498,11 @@ class _PaymentViewState extends State<_PaymentView> {
               ),
             ),
             const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () => _addEntry(ctx, remaining),
-              child: const Text('Tambah'),
-            ),
+            if (_selectedMethod == PaymentMethod.tunai)
+              ElevatedButton(
+                onPressed: () => _addEntry(ctx, remaining),
+                child: const Text('Tambah'),
+              ),
           ],
         ),
         const SizedBox(height: 8),

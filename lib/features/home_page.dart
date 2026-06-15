@@ -25,6 +25,7 @@ import '../core/database/order_dao.dart';
 import '../core/database/table_dao.dart';
 import '../core/models/table.dart';
 import '../core/models/order.dart';
+import '../l10n/app_localizations.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -72,6 +73,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
+    final l10n = AppLocalizations.of(context)!;
     if (authState is! AuthAuthenticated) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
@@ -194,15 +196,19 @@ class _HomePageState extends State<HomePage> {
                 color: Colors.white.withValues(alpha: 0.7),
               );
             }),
-            destinations: const [
+            destinations: [
               NavigationDestination(
-                  icon: Icon(Icons.shopping_cart), label: 'Kasir'),
+                  icon: const Icon(Icons.shopping_cart),
+                  label: l10n.cashier),
               NavigationDestination(
-                  icon: Icon(Icons.history), label: 'History'),
+                  icon: const Icon(Icons.history),
+                  label: l10n.history),
               NavigationDestination(
-                  icon: Icon(Icons.account_balance), label: 'Keuangan'),
+                  icon: const Icon(Icons.account_balance),
+                  label: l10n.finance),
               NavigationDestination(
-                  icon: Icon(Icons.settings), label: 'Pengaturan'),
+                  icon: const Icon(Icons.settings),
+                  label: l10n.settings),
             ],
           ),
         ),
@@ -649,6 +655,7 @@ class _PosViewState extends State<_PosView> {
                 locale: 'id', symbol: 'Rp ', decimalDigits: 0);
             return Container(
               color: Theme.of(ctx).primaryColor,
+              margin: EdgeInsets.only(bottom: MediaQuery.of(ctx).padding.bottom + 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
@@ -1003,7 +1010,19 @@ class _PosViewState extends State<_PosView> {
         // Summary
         if (cart.items.isNotEmpty)
           Container(
-            padding: const EdgeInsets.all(12),
+            margin: EdgeInsets.only(bottom: MediaQuery.of(ctx).padding.bottom + 64),
+            decoration: BoxDecoration(
+              color: Theme.of(ctx).cardColor,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

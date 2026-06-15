@@ -22,9 +22,11 @@ import '../ui/privacy_policy_page.dart';
 import '../ui/table_management_page.dart';
 import '../../../core/database/product_dao.dart';
 import '../../../core/database/stock_dao.dart';
+import '../../../core/bloc/locale_bloc.dart';
 import '../../../core/utils/responsive_page_insets.dart';
 import '../../../core/utils/receipt_settings.dart';
 import '../../../core/utils/crash_reporter.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../cart/bloc/cart_bloc.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -35,10 +37,11 @@ class SettingsPage extends StatelessWidget {
     final authState = context.watch<AuthBloc>().state;
     final user = (authState is AuthAuthenticated) ? authState.user : null;
     final isAdmin = user?.role == 'admin' || user?.role == 'merchant';
+    final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pengaturan'),
+        title: Text(l10n.settings),
       ),
       body: ListView(
         padding: ResponsivePageInsets.horizontal(context, maxContentWidth: 620),
@@ -46,7 +49,7 @@ class SettingsPage extends StatelessWidget {
           const SizedBox(height: 8),
           _SettingsTile(
             icon: Icons.person,
-            title: 'Profil',
+            title: l10n.settingsProfile,
             subtitle: user != null
                 ? '${user.name} • ${user.role == 'admin' ? 'Admin' : user.role == 'merchant' ? 'Merchant' : 'Kasir'}'
                 : '',
@@ -58,8 +61,8 @@ class SettingsPage extends StatelessWidget {
           const Divider(height: 24),
           _SettingsTile(
             icon: Icons.print,
-            title: 'Printer',
-            subtitle: 'Pengaturan printer Bluetooth',
+            title: l10n.settingsPrinter,
+            subtitle: l10n.settingsPrinterSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const PrinterSettingsPage()),
@@ -67,8 +70,8 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.receipt,
-            title: 'Struk',
-            subtitle: 'Nama toko, alamat, pajak, logo',
+            title: l10n.settingsReceipt,
+            subtitle: l10n.settingsReceiptSubtitle,
             onTap: () {
               final cartBloc = context.read<CartBloc>();
               Navigator.push(
@@ -81,8 +84,8 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.settings_applications,
-            title: 'Transaksi',
-            subtitle: 'Kelola stok otomatis & pembatalan transaksi',
+            title: l10n.settingsTransaction,
+            subtitle: l10n.settingsTransactionSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -92,8 +95,8 @@ class SettingsPage extends StatelessWidget {
           const Divider(height: 24),
           _SettingsTile(
             icon: Icons.people,
-            title: 'Kelola Pelanggan',
-            subtitle: 'Tambah, edit, dan hapus pelanggan',
+            title: l10n.settingsCustomer,
+            subtitle: l10n.settingsCustomerSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CustomerPage()),
@@ -101,8 +104,8 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.table_restaurant,
-            title: 'Kelola Meja',
-            subtitle: 'Tambah, edit, dan hapus meja resto',
+            title: l10n.settingsTable,
+            subtitle: l10n.settingsTableSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const TableManagementPage()),
@@ -111,8 +114,8 @@ class SettingsPage extends StatelessWidget {
           if (isAdmin)
             _SettingsTile(
               icon: Icons.person_add,
-              title: 'Kelola Kasir',
-              subtitle: 'Tambah, edit, dan hapus akun kasir',
+              title: l10n.settingsCashier,
+              subtitle: l10n.settingsCashierSubtitle,
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const KasirPage()),
@@ -121,8 +124,8 @@ class SettingsPage extends StatelessWidget {
           const Divider(height: 24),
           _SettingsTile(
             icon: Icons.category,
-            title: 'Kelola Kategori',
-            subtitle: 'Tambah, edit, dan hapus kategori produk',
+            title: l10n.settingsCategory,
+            subtitle: l10n.settingsCategorySubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const CategoryPage()),
@@ -130,8 +133,8 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.inventory,
-            title: 'Kelola Produk',
-            subtitle: 'Tambah, edit, dan hapus produk',
+            title: l10n.settingsProduct,
+            subtitle: l10n.settingsProductSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -144,8 +147,8 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.redeem,
-            title: 'Kelola Bundling',
-            subtitle: 'Buat paket bundling produk dengan harga spesial',
+            title: l10n.settingsBundle,
+            subtitle: l10n.settingsBundleSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const BundlePage()),
@@ -153,8 +156,8 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.warehouse,
-            title: 'Kelola Stok',
-            subtitle: 'Kelola stok produk',
+            title: l10n.settingsStock,
+            subtitle: l10n.settingsStockSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -167,8 +170,8 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.schedule,
-            title: 'Kelola Shift',
-            subtitle: 'Buka atau tutup shift kasir',
+            title: l10n.settingsShift,
+            subtitle: l10n.settingsShiftSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ShiftPage()),
@@ -177,8 +180,8 @@ class SettingsPage extends StatelessWidget {
           const Divider(height: 24),
           _SettingsTile(
             icon: Icons.account_balance,
-            title: 'Kelola Keuangan',
-            subtitle: 'Pemasukan, pengeluaran, dan laporan',
+            title: l10n.settingsFinance,
+            subtitle: l10n.settingsFinanceSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const FinancePage()),
@@ -188,8 +191,8 @@ class SettingsPage extends StatelessWidget {
           if (isAdmin)
             _SettingsTile(
               icon: Icons.backup,
-              title: 'Backup & Restore',
-              subtitle: 'Cadangkan atau pulihkan data',
+              title: l10n.settingsBackup,
+              subtitle: l10n.settingsBackupSubtitle,
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const BackupPage()),
@@ -197,18 +200,24 @@ class SettingsPage extends StatelessWidget {
             ),
           _SettingsTile(
             icon: Icons.palette,
-            title: 'Tema',
-            subtitle: 'Terang, gelap, atau ikuti sistem',
+            title: l10n.settingsTheme,
+            subtitle: l10n.settingsThemeSubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const ThemePage()),
             ),
           ),
+          _SettingsTile(
+            icon: Icons.language,
+            title: l10n.language,
+            subtitle: l10n.languageSubtitle,
+            onTap: () => _showLanguagePicker(context),
+          ),
           const Divider(height: 24),
           _SettingsTile(
             icon: Icons.privacy_tip,
-            title: 'Kebijakan Privasi',
-            subtitle: 'Informasi pengumpulan dan penggunaan data',
+            title: l10n.settingsPrivacy,
+            subtitle: l10n.settingsPrivacySubtitle,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -217,8 +226,8 @@ class SettingsPage extends StatelessWidget {
           ),
           _SettingsTile(
             icon: Icons.info,
-            title: 'Tentang Aplikasi',
-            subtitle: 'Informasi aplikasi DronePos',
+            title: l10n.settingsAbout,
+            subtitle: l10n.settingsAboutSubtitle,
             onTap: () => showAboutDialog(
               context: context,
               applicationName: 'DronePos UMKM',
@@ -226,31 +235,63 @@ class SettingsPage extends StatelessWidget {
               applicationLegalese: '© 2026 DronePos',
               children: [
                 const SizedBox(height: 16),
-                const Text(
-                    'Aplikasi kasir modern untuk bisnis retail. Mendukung pencatatan transaksi, laporan, manajemen produk, pelanggan, dan banyak lagi'),
+                Text(l10n.settingsAboutSubtitle),
               ],
             ),
           ),
           _SettingsTile(
             icon: Icons.email,
-            title: 'Email Kontak',
-            subtitle: 'poslitedrone@gmail.com',
+            title: l10n.settingsEmail,
+            subtitle: l10n.settingsEmailSubtitle,
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Email: poslitedrone@gmail.com')),
+                SnackBar(content: Text('Email: ${l10n.settingsEmailSubtitle}')),
               );
             },
           ),
           _SettingsTile(
             icon: Icons.bug_report,
-            title: 'Laporkan Masalah',
-            subtitle: 'Kirim laporan crash / ANR ke pengembang',
+            title: l10n.settingsReport,
+            subtitle: l10n.settingsReportSubtitle,
             onTap: () => CrashReporter().sendReport(),
           ),
         ],
       ),
     );
   }
+}
+
+void _showLanguagePicker(BuildContext context) {
+  final locale = context.read<LocaleBloc>().state;
+  final l10n = AppLocalizations.of(context)!;
+  showDialog(
+    context: context,
+    builder: (ctx) => SimpleDialog(
+      title: Text(l10n.language),
+      children: [
+        RadioListTile<Locale>(
+          title: Text(l10n.languageIndonesian),
+          subtitle: const Text('Bahasa Indonesia'),
+          value: const Locale('id', 'ID'),
+          groupValue: locale,
+          onChanged: (v) {
+            context.read<LocaleBloc>().add(v!);
+            Navigator.pop(ctx);
+          },
+        ),
+        RadioListTile<Locale>(
+          title: Text(l10n.languageEnglish),
+          subtitle: const Text('English'),
+          value: const Locale('en', 'US'),
+          groupValue: locale,
+          onChanged: (v) {
+            context.read<LocaleBloc>().add(v!);
+            Navigator.pop(ctx);
+          },
+        ),
+      ],
+    ),
+  );
 }
 
 class _SettingsTile extends StatelessWidget {
