@@ -17,6 +17,10 @@ export class User {
   @ApiProperty()
   username: string;
 
+  @Column({ unique: true, length: 100, nullable: true })
+  @ApiProperty({ required: false })
+  email: string;
+
   @Column({ length: 255 })
   password: string;
 
@@ -31,6 +35,18 @@ export class User {
   @Column({ name: 'created_at', length: 50 })
   @ApiProperty()
   createdAt: string;
+
+  @Column({ length: 100, nullable: true, unique: true })
+  @ApiProperty({ required: false })
+  apiKey: string;
+
+  @Column({ length: 20, nullable: true })
+  @ApiProperty({ required: false })
+  phone: string;
+
+  @Column({ length: 255, nullable: true })
+  @ApiProperty({ required: false })
+  address: string;
 
   @OneToMany(() => Order, o => o.user)
   orders: Order[];

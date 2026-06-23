@@ -54,8 +54,7 @@ backend/dist/
 backend/*.log
 backend/*.tsbuildinfo
 
-# Backend Admin (React)
-backend/admin/node_modules/
-backend/admin/dist/
-backend/admin/*.log
-backend/admin/*.tsbuildinfo
+# Admin (React)
+admin/
+admin/*.log
+admin/*.tsbuildinfo
