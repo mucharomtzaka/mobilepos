@@ -8,6 +8,7 @@ import '../../auth/bloc/auth_bloc.dart';
 import '../../shift/bloc/shift_bloc.dart';
 import '../../../core/database/order_dao.dart';
 import '../../../core/database/stock_dao.dart';
+import '../../../core/api/sync_service.dart';
 import 'receipt_page.dart';
 
 class PaymentPage extends StatelessWidget {
@@ -175,6 +176,7 @@ class _PaymentViewState extends State<_PaymentView> {
           if (state is PaymentSuccess) {
             ctx.read<CartBloc>().add(CartClear());
             ctx.read<PaymentBloc>().add(PaymentReset());
+            SyncService.instance.syncAll();
             Navigator.pushReplacement(
               ctx,
               MaterialPageRoute(

@@ -26,6 +26,7 @@ import '../../../core/bloc/locale_bloc.dart';
 import '../../../core/utils/responsive_page_insets.dart';
 import '../../../core/utils/receipt_settings.dart';
 import '../../../core/utils/crash_reporter.dart';
+import '../../../core/api/sync_page.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../cart/bloc/cart_bloc.dart';
 
@@ -196,6 +197,16 @@ class SettingsPage extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const BackupPage()),
+              ),
+            ),
+          if (isAdmin)
+            _SettingsTile(
+              icon: Icons.cloud_sync,
+              title: 'Sync Server',
+              subtitle: 'Sinkronisasi data dengan server',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SyncPage()),
               ),
             ),
           _SettingsTile(

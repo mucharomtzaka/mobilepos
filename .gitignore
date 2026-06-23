@@ -44,3 +44,12 @@ web/build/
 
 # Flutter
 .metadata
+
+# Environment
+.env
+
+# Backend (Nest.js)
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/*.log
