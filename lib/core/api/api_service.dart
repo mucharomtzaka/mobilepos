@@ -10,75 +10,40 @@ class ApiService {
 
   final _settingsDao = SettingsDao();
   String? _baseUrl;
-  String? _token;
 
-  static const _envUrlKey = 'SERVER_URL';
-
-  String get envUrl => dotenv.env[_envUrlKey] ?? '';
+  String get envUrl => dotenv.env['SERVER_URL'] ?? '';
+  String get apiKey => dotenv.env['API_KEY'] ?? '';
 
   Future<String> get baseUrl async {
     if (_baseUrl != null) return _baseUrl!;
     _baseUrl = await _settingsDao.get('server_url');
-    if (_baseUrl == null || _baseUrl!.isEmpty) {
-      _baseUrl = envUrl;
+    if (_baseUrl == null || _baseUrl!.isEmpty) _baseUrl = envUrl;
+    if (_baseUrl != null && _baseUrl!.isNotEmpty) {
+      if (!_baseUrl!.startsWith('http://') && !_baseUrl!.startsWith('https://')) {
+        _baseUrl = 'http://$_baseUrl';
+      }
+      _baseUrl = _baseUrl!.replaceAll(RegExp(r'/+$'), '');
     }
     return _baseUrl ?? '';
   }
 
-  Future<String?> get token async {
-    if (_token != null) return _token;
-    _token = await _settingsDao.get('auth_token');
-    return _token;
-  }
+  bool get hasEnvConfig => envUrl.isNotEmpty && apiKey.isNotEmpty;
 
   Future<bool> isConfigured() async {
     final url = await baseUrl;
     return url.isNotEmpty;
   }
 
-  Future<void> setBaseUrl(String url) async {
-    _baseUrl = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
-    await _settingsDao.set('server_url', _baseUrl!);
-  }
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (apiKey.isNotEmpty) 'x-api-key': apiKey,
+      };
 
-  Future<void> setToken(String t) async {
-    _token = t;
-    await _settingsDao.set('auth_token', t);
-  }
-
-  Future<void> clearToken() async {
-    _token = null;
-    await _settingsDao.set('auth_token', '');
-  }
-
-  Map<String, String> _headers(bool auth) {
-    final h = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
-    if (auth && _token != null) h['Authorization'] = 'Bearer $_token';
-    return h;
-  }
-
-  Future<Map<String, dynamic>> post(
-    String path,
-    Map<String, dynamic> body, {
-    bool auth = true,
-  }) async {
+  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
     final url = await baseUrl;
     final response = await http
-        .post(Uri.parse('$url$path'), headers: _headers(auth), body: jsonEncode(body))
-        .timeout(const Duration(seconds: 30));
-    if (response.statusCode >= 400) {
-      throw HttpException('${response.statusCode}: ${response.body}');
-    }
-    return jsonDecode(response.body) as Map<String, dynamic>;
-  }
-
-  Future<Map<String, dynamic>> get(String path, {bool auth = true}) async {
-    final url = await baseUrl;
-    final response = await http
-        .get(Uri.parse('$url$path'), headers: _headers(auth))
+        .post(Uri.parse('$url$path'), headers: _headers, body: jsonEncode(body))
         .timeout(const Duration(seconds: 30));
     if (response.statusCode >= 400) {
       throw HttpException('${response.statusCode}: ${response.body}');

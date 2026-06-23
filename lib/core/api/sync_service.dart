@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import '../database/database_helper.dart';
 import '../database/settings_dao.dart';
@@ -11,11 +12,23 @@ class SyncService {
   final _settings = SettingsDao();
   final _dbHelper = DatabaseHelper.instance;
 
+  static const _keyEnabled = 'sync_enabled';
+  static const _keyLog = 'sync_log';
+
   String? _lastError;
   String? get lastError => _lastError;
 
   bool _syncing = false;
   bool get isSyncing => _syncing;
+
+  Future<bool> get isEnabled async {
+    final v = await _settings.get(_keyEnabled);
+    return v == 'true';
+  }
+
+  Future<void> setEnabled(bool v) async {
+    await _settings.set(_keyEnabled, v.toString());
+  }
 
   Future<DateTime?> get lastSyncAt async {
     final v = await _settings.get('last_sync_at');
@@ -23,51 +36,32 @@ class SyncService {
     return DateTime.tryParse(v);
   }
 
-  Future<bool> login(String username, String password) async {
-    try {
-      final res = await _api.post('/api/auth/login', {
-        'username': username,
-        'password': password,
-      }, auth: false);
-      final token = res['accessToken'] as String?;
-      if (token == null) return false;
-      await _api.setToken(token);
-      return true;
-    } catch (e) {
-      _lastError = e.toString();
-      return false;
-    }
-  }
+  Future<String?> get lastLog async => _settings.get(_keyLog);
 
-  Future<bool> register(String name, String username, String password, {String role = 'kasir'}) async {
-    try {
-      final res = await _api.post('/api/auth/register', {
-        'name': name,
-        'username': username,
-        'password': password,
-        'role': role,
-      }, auth: false);
-      final token = res['accessToken'] as String?;
-      if (token == null) return false;
-      await _api.setToken(token);
-      return true;
-    } catch (e) {
-      _lastError = e.toString();
-      return false;
-    }
+  Future<void> _log(String msg) async {
+    final ts = DateTime.now().toIso8601String();
+    debugPrint('[SYNC] $msg');
+    await _settings.set(_keyLog, '[$ts] $msg');
   }
 
   Future<bool> syncAll() async {
-    if (_syncing) return false;
+    if (_syncing) {
+      await _log('Sync skipped: already in progress');
+      return false;
+    }
     _syncing = true;
     _lastError = null;
+    await _log('Sync started');
     try {
       await _push();
       await _pull();
-      await _settings.set('last_sync_at', DateTime.now().toIso8601String());
+      final now = DateTime.now().toIso8601String();
+      await _settings.set('last_sync_at', now);
+      await _log('Sync completed at $now');
       return true;
     } catch (e) {
       _lastError = e.toString();
+      await _log('Sync error: $e');
       return false;
     } finally {
       _syncing = false;
@@ -76,9 +70,7 @@ class SyncService {
 
   Future<void> _push() async {
     final db = await _dbHelper.db;
-
     final tables = <String, String>{
-      'users': 'users',
       'categories': 'categories',
       'products': 'products',
       'productVariants': 'product_variants',
@@ -92,26 +84,28 @@ class SyncService {
       'stockMovements': 'stock_movements',
       'transactions': 'transactions',
       'tables': 'tables',
-      'settings': 'settings',
     };
-
     final payload = <String, dynamic>{};
-    for (final entry in tables.entries) {
-      final rows = await db.query(entry.value);
+    final counts = <String, int>{};
+    for (final e in tables.entries) {
+      final rows = await db.query(e.value);
       if (rows.isEmpty) continue;
-      payload[entry.key] = rows.map(_snakeToCamel).toList();
+      payload[e.key] = rows.map(_snakeToCamel).toList();
+      counts[e.key] = rows.length;
     }
-
-    if (payload.isEmpty) return;
+    if (payload.isEmpty) {
+      await _log('Push: no data');
+      return;
+    }
+    await _log('Push: $counts');
     await _api.post('/api/sync/push', payload);
+    await _log('Push OK');
   }
 
   Future<void> _pull() async {
     final db = await _dbHelper.db;
     final lastSync = await _settings.get('last_sync_at') ?? '';
-
     final tables = <String, String>{
-      'users': 'users',
       'categories': 'categories',
       'products': 'products',
       'productVariants': 'product_variants',
@@ -125,76 +119,51 @@ class SyncService {
       'stockMovements': 'stock_movements',
       'transactions': 'transactions',
       'tables': 'tables',
-      'settings': 'settings',
     };
-
-    final res = await _api.post('/api/sync/pull', {
-      'lastSyncAt': lastSync,
-    });
-
+    await _log('Pull: lastSyncAt=$lastSync');
+    final res = await _api.post('/api/sync/pull', {'lastSyncAt': lastSync});
+    final counts = <String, int>{};
     await db.transaction((txn) async {
-      for (final entry in tables.entries) {
-        final apiKey = entry.key;
-        final tableName = entry.value;
-        final rows = res[apiKey];
+      for (final e in tables.entries) {
+        final rows = res[e.key];
         if (rows is! List || rows.isEmpty) continue;
+        counts[e.key] = rows.length;
         for (final row in rows) {
           final map = _camelToSnake(row as Map<String, dynamic>);
           _stripRelations(map);
-          await txn.insert(tableName, map,
-              conflictAlgorithm: ConflictAlgorithm.replace);
+          await txn.insert(e.value, map, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       }
     });
+    await _log('Pull: $counts');
+    await _log('Pull OK');
   }
 
-  void _stripRelations(Map<String, dynamic> map) {
-    map.remove('user');
-    map.remove('category');
-    map.remove('product');
-    map.remove('customer');
-    map.remove('table');
-    map.remove('shift');
-    map.remove('bundle');
-    map.remove('order');
-    map.remove('variants');
-    map.remove('items');
-    map.remove('payments');
-    map.remove('orders');
-    map.remove('bundleItems');
-    map.remove('stockMovements');
-    map.remove('shifts');
-    map.remove('products');
-    map.remove('orderItems');
+  void _stripRelations(Map<String, dynamic> m) {
+    for (final k in ['user','category','product','customer','table','shift','bundle','order',
+        'variants','items','payments','orders','bundleItems','stockMovements','shifts','products','orderItems']) {
+      m.remove(k);
+    }
   }
 
   Map<String, dynamic> _snakeToCamel(Map<String, dynamic> m) {
-    final result = <String, dynamic>{};
-    for (final entry in m.entries) {
-      result[_toCamelCase(entry.key)] = entry.value;
-    }
-    result.remove('id');
-    return result;
+    final r = <String, dynamic>{};
+    for (final e in m.entries) { r[_toCamel(e.key)] = e.value; }
+    return r;
   }
 
   Map<String, dynamic> _camelToSnake(Map<String, dynamic> m) {
-    final result = <String, dynamic>{};
-    for (final entry in m.entries) {
-      result[_toSnakeCase(entry.key)] = entry.value;
-    }
-    return result;
+    final r = <String, dynamic>{};
+    for (final e in m.entries) { r[_toSnake(e.key)] = e.value; }
+    return r;
   }
 
-  String _toCamelCase(String s) {
-    final parts = s.split('_');
-    if (parts.length == 1) return s;
-    return parts[0] + parts.skip(1).map((p) => p[0].toUpperCase() + p.substring(1)).join();
+  String _toCamel(String s) {
+    final p = s.split('_');
+    if (p.length == 1) return s;
+    return p[0] + p.skip(1).map((e) => e[0].toUpperCase() + e.substring(1)).join();
   }
 
-  String _toSnakeCase(String s) {
-    return s.replaceAllMapped(
-      RegExp(r'[A-Z]'),
-      (m) => '_${m.group(0)!.toLowerCase()}',
-    );
-  }
+  String _toSnake(String s) =>
+      s.replaceAllMapped(RegExp(r'[A-Z]'), (m) => '_${m.group(0)!.toLowerCase()}');
 }

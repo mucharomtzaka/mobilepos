@@ -27,6 +27,7 @@ import 'features/settings/ui/theme_page.dart';
 import 'core/utils/bluetooth_printer.dart';
 import 'core/utils/receipt_settings.dart';
 import 'core/utils/crash_reporter.dart';
+import 'core/api/sync_manager.dart';
 
 bool _isTablet() {
   final view = WidgetsBinding.instance.platformDispatcher.views.first;
@@ -38,7 +39,11 @@ bool _isTablet() {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load();
+  try {
+    await dotenv.load(fileName: 'assets/.env');
+  } catch (_) {
+    // .env not found, use defaults
+  }
 
   if (_isTablet()) {
     await SystemChrome.setPreferredOrientations([
@@ -53,6 +58,8 @@ void main() async {
     ReceiptSettings.load(),
     CrashReporter.init(),
   ]);
+  
+  SyncManager.instance.init();
   
   runApp(const MobilePosApp());
 }

@@ -1,9 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
 export class SyncPullDto {
-  @ApiProperty({ description: 'ISO timestamp of last sync' })
-  lastSyncAt: string;
+  @IsString() @ApiProperty() lastSyncAt: string;
 
-  @ApiProperty({ description: 'Optional table filter', required: false })
-  tables?: string[];
+  @IsOptional() @ApiProperty({ required: false }) tables?: string[];
 }

@@ -8,6 +8,6 @@ export const databaseConfig = (): TypeOrmModuleOptions => ({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_DATABASE || 'mobilepos',
   entities: [__dirname + '/../database/entities/*.entity{.ts,.js}'],
-  synchronize: true,
+  synchronize: false,
   charset: 'utf8mb4',
 });

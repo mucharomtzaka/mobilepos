@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from '../auth/auth.module';
 import { SyncController } from './sync.controller';
 import { SyncService } from './sync.service';
 import { User } from '../../database/entities/user.entity';
@@ -37,6 +38,7 @@ import { Setting } from '../../database/entities/setting.entity';
       RestoTable,
       Setting,
     ]),
+    AuthModule,
   ],
   controllers: [SyncController],
   providers: [SyncService],

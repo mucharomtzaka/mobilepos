@@ -19,7 +19,7 @@ import appConfig from './config/app.config';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ load: [appConfig] }),
+    ConfigModule.forRoot({ envFilePath: '.env', load: [appConfig] }),
     DatabaseModule,
     AuthModule,
     UsersModule,

@@ -46,7 +46,7 @@ export class OrdersService {
   }
 
   async findAll(query: OrderQueryDto) {
-    const { status, startDate, endDate, userId, shiftId, page = 1, limit = 20 } = query;
+    const { search, status, startDate, endDate, userId, shiftId, page = 1, limit = 20 } = query;
     const where: FindOptionsWhere<Order> = {};
 
     if (status) where.status = status;
@@ -56,13 +56,28 @@ export class OrdersService {
       where.createdAt = Between(startDate, endDate);
     }
 
-    const [data, total] = await this.orderRepo.findAndCount({
-      where,
-      relations: ['items', 'payments', 'user', 'customer', 'table'],
-      skip: (page - 1) * limit,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
+    const queryBuilder = this.orderRepo.createQueryBuilder('order')
+      .leftJoinAndSelect('order.items', 'items')
+      .leftJoinAndSelect('order.payments', 'payments')
+      .leftJoinAndSelect('order.user', 'user')
+      .leftJoinAndSelect('order.customer', 'customer')
+      .leftJoinAndSelect('order.table', 'table')
+      .orderBy('order.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    if (status) queryBuilder.andWhere('order.status = :status', { status });
+    if (userId) queryBuilder.andWhere('order.userId = :userId', { userId });
+    if (shiftId) queryBuilder.andWhere('order.shiftId = :shiftId', { shiftId });
+    if (startDate && endDate) queryBuilder.andWhere('order.createdAt BETWEEN :startDate AND :endDate', { startDate, endDate });
+    if (search) {
+      queryBuilder.andWhere(
+        '(order.orderNumber LIKE :search OR user.name LIKE :search OR customer.name LIKE :search OR CAST(order.total AS CHAR) LIKE :search)',
+        { search: `%${search}%` }
+      );
+    }
+
+    const [data, total] = await queryBuilder.getManyAndCount();
 
     return { data, total, page, limit };
   }

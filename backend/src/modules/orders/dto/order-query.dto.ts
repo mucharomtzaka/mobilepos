@@ -3,6 +3,11 @@ import { IsOptional, IsString, IsNumber, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class OrderQueryDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @ApiProperty({ required: false, enum: ['completed', 'draft'] })
   @IsOptional()
   @IsIn(['completed', 'draft'])

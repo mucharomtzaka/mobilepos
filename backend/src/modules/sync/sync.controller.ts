@@ -1,12 +1,12 @@
 import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ApiKeyGuard } from './guards/api-key.guard';
 import { SyncService } from './sync.service';
 import { SyncPullDto } from './dto/sync-pull.dto';
 import { SyncPushDto } from './dto/sync-push.dto';
 
 @ApiTags('Sync')
-@UseGuards(JwtAuthGuard)
+@UseGuards(ApiKeyGuard)
 @Controller('sync')
 export class SyncController {
   constructor(private syncService: SyncService) {}

@@ -51,5 +51,11 @@ web/build/
 # Backend (Nest.js)
 backend/node_modules/
 backend/dist/
-backend/.env
 backend/*.log
+backend/*.tsbuildinfo
+
+# Backend Admin (React)
+backend/admin/node_modules/
+backend/admin/dist/
+backend/admin/*.log
+backend/admin/*.tsbuildinfo

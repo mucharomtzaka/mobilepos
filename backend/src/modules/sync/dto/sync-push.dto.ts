@@ -1,48 +1,20 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional } from 'class-validator';
 
 export class SyncPushDto {
-  @ApiProperty({ required: false })
-  users?: any[];
-
-  @ApiProperty({ required: false })
-  categories?: any[];
-
-  @ApiProperty({ required: false })
-  products?: any[];
-
-  @ApiProperty({ required: false })
-  productVariants?: any[];
-
-  @ApiProperty({ required: false })
-  bundles?: any[];
-
-  @ApiProperty({ required: false })
-  bundleItems?: any[];
-
-  @ApiProperty({ required: false })
-  customers?: any[];
-
-  @ApiProperty({ required: false })
-  orders?: any[];
-
-  @ApiProperty({ required: false })
-  orderItems?: any[];
-
-  @ApiProperty({ required: false })
-  payments?: any[];
-
-  @ApiProperty({ required: false })
-  shifts?: any[];
-
-  @ApiProperty({ required: false })
-  stockMovements?: any[];
-
-  @ApiProperty({ required: false })
-  transactions?: any[];
-
-  @ApiProperty({ required: false })
-  tables?: any[];
-
-  @ApiProperty({ required: false })
-  settings?: any[];
+  @IsOptional() @ApiProperty({ required: false }) users?: any[];
+  @IsOptional() @ApiProperty({ required: false }) categories?: any[];
+  @IsOptional() @ApiProperty({ required: false }) products?: any[];
+  @IsOptional() @ApiProperty({ required: false }) productVariants?: any[];
+  @IsOptional() @ApiProperty({ required: false }) bundles?: any[];
+  @IsOptional() @ApiProperty({ required: false }) bundleItems?: any[];
+  @IsOptional() @ApiProperty({ required: false }) customers?: any[];
+  @IsOptional() @ApiProperty({ required: false }) orders?: any[];
+  @IsOptional() @ApiProperty({ required: false }) orderItems?: any[];
+  @IsOptional() @ApiProperty({ required: false }) payments?: any[];
+  @IsOptional() @ApiProperty({ required: false }) shifts?: any[];
+  @IsOptional() @ApiProperty({ required: false }) stockMovements?: any[];
+  @IsOptional() @ApiProperty({ required: false }) transactions?: any[];
+  @IsOptional() @ApiProperty({ required: false }) tables?: any[];
+  @IsOptional() @ApiProperty({ required: false }) settings?: any[];
 }

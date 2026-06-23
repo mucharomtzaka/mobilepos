@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
+import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
+import { Repository, MoreThan, DataSource } from 'typeorm';
 import { User } from '../../database/entities/user.entity';
 import { Category } from '../../database/entities/category.entity';
 import { Product } from '../../database/entities/product.entity';
@@ -22,6 +22,7 @@ import { SyncResponseDto } from './dto/sync-response.dto';
 @Injectable()
 export class SyncService {
   constructor(
+    @InjectDataSource() private dataSource: DataSource,
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Category) private categoryRepo: Repository<Category>,
     @InjectRepository(Product) private productRepo: Repository<Product>,
@@ -88,47 +89,47 @@ export class SyncService {
   async push(data: SyncPushDto): Promise<{ status: string; counts: { [table: string]: number } }> {
     const counts: { [table: string]: number } = {};
 
-    const tableHandlers: [string, any[] | undefined, (rows: any[]) => Promise<void>][] = [
-      ['users', data.users, async rows => { for (const r of rows) await this.userRepo.save(r); }],
-      ['categories', data.categories, async rows => { for (const r of rows) await this.categoryRepo.save(r); }],
-      ['products', data.products, async rows => { for (const r of rows) await this.productRepo.save(r); }],
-      ['productVariants', data.productVariants, async rows => { for (const r of rows) await this.productVariantRepo.save(r); }],
-      ['bundles', data.bundles, async rows => { for (const r of rows) await this.bundleRepo.save(r); }],
-      ['bundleItems', data.bundleItems, async rows => { for (const r of rows) await this.bundleItemRepo.save(r); }],
-      ['customers', data.customers, async rows => { for (const r of rows) await this.customerRepo.save(r); }],
-      ['orders', data.orders, async rows => { for (const r of rows) await this.handleOrder(r); }],
-      ['orderItems', data.orderItems, async rows => { for (const r of rows) await this.orderItemRepo.save(r); }],
-      ['payments', data.payments, async rows => { for (const r of rows) await this.paymentRepo.save(r); }],
-      ['shifts', data.shifts, async rows => { for (const r of rows) await this.shiftRepo.save(r); }],
-      ['stockMovements', data.stockMovements, async rows => { for (const r of rows) await this.stockMovementRepo.save(r); }],
-      ['transactions', data.transactions, async rows => { for (const r of rows) await this.transactionRepo.save(r); }],
-      ['tables', data.tables, async rows => { for (const r of rows) await this.tableRepo.save(r); }],
-      ['settings', data.settings, async rows => { for (const r of rows) await this.settingRepo.save(r); }],
-    ];
+    await this.dataSource.transaction(async (em) => {
+      await em.query('SET FOREIGN_KEY_CHECKS = 0');
 
-    for (const [key, rows, handler] of tableHandlers) {
-      if (!rows || rows.length === 0) continue;
-      await handler(rows);
-      counts[key] = rows.length;
-    }
+      const tableMap: [string, any[] | undefined, any][] = [
+        ['users', data.users, User],
+        ['categories', data.categories, Category],
+        ['products', data.products, Product],
+        ['productVariants', data.productVariants, ProductVariant],
+        ['bundles', data.bundles, Bundle],
+        ['bundleItems', data.bundleItems, BundleItem],
+        ['customers', data.customers, Customer],
+        ['orders', data.orders, Order],
+        ['orderItems', data.orderItems, OrderItem],
+        ['payments', data.payments, Payment],
+        ['shifts', data.shifts, Shift],
+        ['stockMovements', data.stockMovements, StockMovement],
+        ['transactions', data.transactions, Transaction],
+        ['tables', data.tables, RestoTable],
+        ['settings', data.settings, Setting],
+      ];
+
+      for (const [key, rows, entity] of tableMap) {
+        if (!rows || rows.length === 0) continue;
+        try {
+          const repo = em.getRepository(entity);
+          for (let r of rows) {
+            if (key === 'users') {
+              const existing = await repo.findOne({ where: { id: r.id } });
+              if (existing && !r.password) r.password = existing.password;
+            }
+            await repo.save(r);
+          }
+          counts[key] = rows.length;
+        } catch (e: any) {
+          console.error(`Sync push error on ${key}:`, e.message);
+        }
+      }
+
+      await em.query('SET FOREIGN_KEY_CHECKS = 1');
+    });
 
     return { status: 'ok', counts };
-  }
-
-  private async handleOrder(orderData: any) {
-    const { items, payments, ...orderFields } = orderData;
-    const saved = await this.orderRepo.save(orderFields);
-
-    if (items && items.length > 0) {
-      await this.orderItemRepo.delete({ orderId: saved.id });
-      const newItems = items.map((i: any) => ({ ...i, orderId: saved.id }));
-      await this.orderItemRepo.save(newItems);
-    }
-
-    if (payments && payments.length > 0) {
-      await this.paymentRepo.delete({ orderId: saved.id });
-      const newPayments = payments.map((p: any) => ({ ...p, orderId: saved.id }));
-      await this.paymentRepo.save(newPayments);
-    }
   }
 }

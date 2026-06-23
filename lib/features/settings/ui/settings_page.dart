@@ -26,7 +26,7 @@ import '../../../core/bloc/locale_bloc.dart';
 import '../../../core/utils/responsive_page_insets.dart';
 import '../../../core/utils/receipt_settings.dart';
 import '../../../core/utils/crash_reporter.dart';
-import '../../../core/api/sync_page.dart';
+import '../../../core/api/sync_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../cart/bloc/cart_bloc.dart';
 
@@ -200,15 +200,7 @@ class SettingsPage extends StatelessWidget {
               ),
             ),
           if (isAdmin)
-            _SettingsTile(
-              icon: Icons.cloud_sync,
-              title: 'Sync Server',
-              subtitle: 'Sinkronisasi data dengan server',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SyncPage()),
-              ),
-            ),
+            _SyncTile(),
           _SettingsTile(
             icon: Icons.palette,
             title: l10n.settingsTheme,
@@ -332,6 +324,51 @@ class _SettingsTile extends StatelessWidget {
       trailing: Icon(Icons.chevron_right,
           color: Theme.of(context).colorScheme.onSurfaceVariant),
       onTap: onTap,
+    );
+  }
+}
+
+class _SyncTile extends StatefulWidget {
+  @override
+  State<_SyncTile> createState() => _SyncTileState();
+}
+
+class _SyncTileState extends State<_SyncTile> {
+  final _sync = SyncService.instance;
+  bool _enabled = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    (() async {
+      final v = await _sync.isEnabled;
+      if (mounted) setState(() { _enabled = v; _loading = false; });
+    })();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SwitchListTile(
+      secondary: CircleAvatar(
+        backgroundColor: theme.colorScheme.primaryContainer,
+        radius: 22,
+        child: Icon(Icons.cloud_sync, color: theme.colorScheme.onPrimaryContainer),
+      ),
+      title: const Text('Sync Server', style: TextStyle(fontWeight: FontWeight.w500)),
+      subtitle: Text(
+        _loading ? 'Loading...' : _enabled ? 'Active' : 'Inactive',
+        style: const TextStyle(fontSize: 12),
+      ),
+      value: _enabled,
+      onChanged: _loading
+          ? null
+          : (v) async {
+              setState(() => _enabled = v);
+              await _sync.setEnabled(v);
+              if (v) _sync.syncAll();
+            },
     );
   }
 }
